@@ -11,6 +11,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -48,5 +49,12 @@ public class PrayerRequestController {
     public PrayerRequestResponse getById(@PathVariable Long id,
                                           @CurrentGroupId Long groupId) {
         return prayerRequestService.getById(id, groupId);
+    }
+
+    @PatchMapping("/{id}/answer")
+    public PrayerRequestResponse markAsAnswered(@PathVariable Long id,
+                                                 @CurrentGroupId Long groupId,
+                                                 @AuthUser Long userId) {
+        return prayerRequestService.markAsAnswered(id, groupId, userId);
     }
 }

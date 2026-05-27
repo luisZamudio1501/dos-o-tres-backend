@@ -1,16 +1,25 @@
 package com.dosotres.prayer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
+import com.dosotres.common.exception.ConflictException;
+import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.group.Group;
+import com.dosotres.group.GroupMember;
+import com.dosotres.group.GroupMemberRepository;
 import com.dosotres.group.GroupRepository;
+import com.dosotres.group.GroupRole;
 import com.dosotres.prayer.dto.CreatePrayerRequest;
 import com.dosotres.prayer.dto.PrayerRequestResponse;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,13 +40,17 @@ class PrayerRequestServiceTest {
     @Mock
     private GroupRepository groupRepository;
     @Mock
+    private GroupMemberRepository groupMemberRepository;
+    @Mock
     private UserRepository userRepository;
+
+    private final Clock fixedClock = Clock.fixed(Instant.parse("2026-05-26T12:00:00Z"), ZoneId.of("UTC"));
 
     private PrayerRequestService service;
 
     @BeforeEach
     void setUp() {
-        service = new PrayerRequestService(prayerRequestRepository, groupRepository, userRepository);
+        service = new PrayerRequestService(prayerRequestRepository, groupRepository, groupMemberRepository, userRepository, fixedClock);
     }
 
     private Group makeGroup(Long id) {
@@ -117,5 +130,68 @@ class PrayerRequestServiceTest {
         Page<PrayerRequestResponse> result = service.listByGroup(1L, null, pageable);
 
         assertThat(result.getContent()).hasSize(2);
+    }
+
+    @Test
+    void markAsAnswered_authorCanMark() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.PENDING);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+        when(prayerRequestRepository.save(any(PrayerRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PrayerRequestResponse response = service.markAsAnswered(10L, 1L, 1L);
+
+        assertThat(response.status()).isEqualTo("ANSWERED");
+        assertThat(response.answeredAt()).isNotNull();
+    }
+
+    @Test
+    void markAsAnswered_adminCanMark() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        User admin = makeUser(2L, "Admin");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.PENDING);
+
+        GroupMember adminMember = new GroupMember();
+        adminMember.setRole(GroupRole.ADMIN);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+        when(groupMemberRepository.findByGroupIdAndUserId(1L, 2L)).thenReturn(Optional.of(adminMember));
+        when(prayerRequestRepository.save(any(PrayerRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PrayerRequestResponse response = service.markAsAnswered(10L, 1L, 2L);
+
+        assertThat(response.status()).isEqualTo("ANSWERED");
+    }
+
+    @Test
+    void markAsAnswered_nonAuthorMemberThrowsForbidden() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.PENDING);
+
+        GroupMember member = new GroupMember();
+        member.setRole(GroupRole.MEMBER);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+        when(groupMemberRepository.findByGroupIdAndUserId(1L, 99L)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> service.markAsAnswered(10L, 1L, 99L))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void markAsAnswered_alreadyAnsweredThrowsConflict() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ANSWERED);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+
+        assertThatThrownBy(() -> service.markAsAnswered(10L, 1L, 1L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already answered");
     }
 }

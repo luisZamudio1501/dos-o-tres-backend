@@ -1,12 +1,18 @@
 package com.dosotres.prayer;
 
+import com.dosotres.common.exception.ConflictException;
+import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.group.Group;
+import com.dosotres.group.GroupMemberRepository;
 import com.dosotres.group.GroupRepository;
+import com.dosotres.group.GroupRole;
 import com.dosotres.prayer.dto.CreatePrayerRequest;
 import com.dosotres.prayer.dto.PrayerRequestResponse;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
+import java.time.Clock;
+import java.time.Instant;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -18,14 +24,20 @@ public class PrayerRequestService {
 
     private final PrayerRequestRepository prayerRequestRepository;
     private final GroupRepository groupRepository;
+    private final GroupMemberRepository groupMemberRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
 
     public PrayerRequestService(PrayerRequestRepository prayerRequestRepository,
                                  GroupRepository groupRepository,
-                                 UserRepository userRepository) {
+                                 GroupMemberRepository groupMemberRepository,
+                                 UserRepository userRepository,
+                                 Clock clock) {
         this.prayerRequestRepository = prayerRequestRepository;
         this.groupRepository = groupRepository;
+        this.groupMemberRepository = groupMemberRepository;
         this.userRepository = userRepository;
+        this.clock = clock;
     }
 
     public PrayerRequestResponse create(CreatePrayerRequest req, Long groupId, Long userId) {
@@ -63,6 +75,32 @@ public class PrayerRequestService {
         if (!pr.getGroup().getId().equals(groupId)) {
             throw new ResourceNotFoundException("PrayerRequest", "id+groupId", id + "+" + groupId);
         }
+        return toResponse(pr);
+    }
+
+    public PrayerRequestResponse markAsAnswered(Long id, Long groupId, Long userId) {
+        PrayerRequest pr = prayerRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("PrayerRequest", "id", id));
+        if (!pr.getGroup().getId().equals(groupId)) {
+            throw new ResourceNotFoundException("PrayerRequest", "id+groupId", id + "+" + groupId);
+        }
+        if (pr.getStatus() == PrayerRequestStatus.ANSWERED) {
+            throw new ConflictException("Prayer request is already answered");
+        }
+
+        boolean isAuthor = pr.getAuthor().getId().equals(userId);
+        boolean isAdmin = groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
+                .map(m -> m.getRole() == GroupRole.ADMIN)
+                .orElse(false);
+
+        if (!isAuthor && !isAdmin) {
+            throw new ForbiddenException("Only the author or a group admin can mark a prayer request as answered");
+        }
+
+        pr.setStatus(PrayerRequestStatus.ANSWERED);
+        pr.setAnsweredAt(Instant.now(clock));
+        prayerRequestRepository.save(pr);
+
         return toResponse(pr);
     }
 
