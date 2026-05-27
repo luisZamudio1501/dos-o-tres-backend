@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:tc:mariadb:11:///dosotres
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    baseline-on-migrate: true

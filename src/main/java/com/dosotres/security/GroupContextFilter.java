@@ -1,0 +1,92 @@
+package com.dosotres.security;
+
+import com.dosotres.group.GroupMemberRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
+@Component
+public class GroupContextFilter extends OncePerRequestFilter {
+
+    private static final String GROUP_HEADER = "X-Group-Id";
+
+    private final GroupMemberRepository groupMemberRepository;
+    private final ObjectMapper objectMapper;
+    private final List<RequestMatcher> excludedMatchers;
+
+    public GroupContextFilter(GroupMemberRepository groupMemberRepository, ObjectMapper objectMapper) {
+        this.groupMemberRepository = groupMemberRepository;
+        this.objectMapper = objectMapper;
+        this.excludedMatchers = List.of(
+                new AntPathRequestMatcher("/api/auth/**"),
+                new AntPathRequestMatcher("/api/groups", "GET"),
+                new AntPathRequestMatcher("/api/groups", "POST"),
+                new AntPathRequestMatcher("/api/groups/join", "POST"),
+                new AntPathRequestMatcher("/actuator/**"),
+                new AntPathRequestMatcher("/swagger-ui/**"),
+                new AntPathRequestMatcher("/v3/api-docs/**")
+        );
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return excludedMatchers.stream().anyMatch(matcher -> matcher.matches(request));
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        String headerValue = request.getHeader(GROUP_HEADER);
+        if (headerValue == null || headerValue.isBlank()) {
+            respondForbidden(response);
+            return;
+        }
+
+        Long groupId;
+        try {
+            groupId = Long.parseLong(headerValue);
+        } catch (NumberFormatException e) {
+            respondForbidden(response);
+            return;
+        }
+
+        Long userId = (Long) authentication.getPrincipal();
+
+        if (!groupMemberRepository.existsByGroupIdAndUserId(groupId, userId)) {
+            respondForbidden(response);
+            return;
+        }
+
+        request.setAttribute("groupId", groupId);
+        filterChain.doFilter(request, response);
+    }
+
+    private void respondForbidden(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        objectMapper.writeValue(response.getOutputStream(),
+                Map.of("status", 403, "message", "No eres miembro de este grupo"));
+    }
+}

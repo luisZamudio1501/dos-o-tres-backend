@@ -1,0 +1,138 @@
+package com.dosotres.user;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import java.time.Instant;
+
+@Entity
+@Table(name = "users")
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true)
+    private String email;
+
+    @Column(name = "display_name", nullable = false, length = 100)
+    private String displayName;
+
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
+
+    @Column(nullable = false, length = 50)
+    private String timezone = "America/Argentina/Buenos_Aires";
+
+    @Column(nullable = false, length = 10)
+    private String locale = "es";
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "subscription_tier", nullable = false)
+    private SubscriptionTier subscriptionTier = SubscriptionTier.FREE;
+
+    @Column(name = "max_groups", nullable = false)
+    private Integer maxGroups = 3;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    @PrePersist
+    void onCreate() {
+        Instant now = Instant.now();
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        this.updatedAt = Instant.now();
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
+    public String getTimezone() {
+        return timezone;
+    }
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
+    }
+
+    public String getLocale() {
+        return locale;
+    }
+
+    public void setLocale(String locale) {
+        this.locale = locale;
+    }
+
+    public SubscriptionTier getSubscriptionTier() {
+        return subscriptionTier;
+    }
+
+    public void setSubscriptionTier(SubscriptionTier subscriptionTier) {
+        this.subscriptionTier = subscriptionTier;
+    }
+
+    public Integer getMaxGroups() {
+        return maxGroups;
+    }
+
+    public void setMaxGroups(Integer maxGroups) {
+        this.maxGroups = maxGroups;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public enum SubscriptionTier {
+        FREE, PREMIUM
+    }
+}

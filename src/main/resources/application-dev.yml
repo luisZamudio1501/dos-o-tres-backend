@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: jdbc:mariadb://localhost:3306/dosotres
+    username: root
+    password: ${DB_PASS:root}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+  flyway:
+    baseline-on-migrate: true
+
+logging:
+  level:
+    com.dosotres: DEBUG
+    org.hibernate.SQL: DEBUG
