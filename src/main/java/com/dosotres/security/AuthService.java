@@ -5,11 +5,15 @@ import com.dosotres.security.dto.LoginRequest;
 import com.dosotres.security.dto.RegisterRequest;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -35,6 +39,7 @@ public class AuthService {
         user = userRepository.save(user);
 
         String token = jwtService.generateToken(user.getId(), user.getEmail());
+        log.info("User registered: id={}", user.getId());
         return new AuthResponse(user.getId(), user.getEmail(), user.getDisplayName(), token);
     }
 

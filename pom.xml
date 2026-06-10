@@ -138,13 +138,105 @@
                     </excludes>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>integration</excludedGroups>
+                    <excludes>
+                        <exclude>**/DosotresApplicationTests.java</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>PACKAGE</element>
+                                    <includes>
+                                        <include>com.dosotres.security</include>
+                                        <include>com.dosotres.group</include>
+                                        <include>com.dosotres.prayer</include>
+                                        <include>com.dosotres.timer</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.50</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                            <excludes>
+                                <exclude>com/dosotres/security/dto/**</exclude>
+                                <exclude>com/dosotres/security/SecurityConfig.class</exclude>
+                                <exclude>com/dosotres/security/JwtAuthFilter.class</exclude>
+                                <exclude>com/dosotres/security/AuthController.class</exclude>
+                                <exclude>com/dosotres/security/GroupContextFilter.class</exclude>
+                                <exclude>com/dosotres/security/annotations/**</exclude>
+                                <exclude>com/dosotres/group/dto/**</exclude>
+                                <exclude>com/dosotres/group/GroupController.class</exclude>
+                                <exclude>com/dosotres/prayer/dto/**</exclude>
+                                <exclude>com/dosotres/prayer/PrayerRequestController.class</exclude>
+                                <exclude>com/dosotres/prayer/PrayerCommitmentController.class</exclude>
+                                <exclude>com/dosotres/timer/dto/**</exclude>
+                                <exclude>com/dosotres/timer/TimerController.class</exclude>
+                                <exclude>com/dosotres/common/dto/**</exclude>
+                                <exclude>com/dosotres/common/GlobalExceptionHandler.class</exclude>
+                                <exclude>com/dosotres/config/**</exclude>
+                                <exclude>com/dosotres/DosotresApplication.class</exclude>
+                                <exclude>com/dosotres/prayer/PrayerRequestStatus.class</exclude>
+                                <exclude>com/dosotres/group/GroupRole.class</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
     <profiles>
-        <!-- On Windows, Docker Desktop exposes a non-standard named pipe.
-             This profile auto-activates on Windows to pass the correct DOCKER_HOST
-             to Testcontainers via Surefire's forked JVM. -->
+        <!-- Include integration tests when DB is available: mvn verify -Pintegration -->
+        <profile>
+            <id>integration</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <excludedGroups combine.self="override"/>
+                            <excludes combine.self="override"/>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- On Windows, Docker Desktop exposes a non-standard named pipe. -->
         <profile>
             <id>windows-docker</id>
             <activation>
