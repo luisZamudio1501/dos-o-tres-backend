@@ -1,6 +1,8 @@
 package com.dosotres.timer;
 
+import com.dosotres.prayer.PrayerSessionSelectionService;
 import com.dosotres.security.annotations.AuthUser;
+import com.dosotres.security.annotations.CurrentGroupId;
 import com.dosotres.timer.dto.SessionResponse;
 import com.dosotres.timer.dto.StartSessionRequest;
 import com.dosotres.timer.dto.SyncSessionRequest;
@@ -20,16 +22,26 @@ import org.springframework.web.bind.annotation.RestController;
 public class TimerController {
 
     private final TimerService timerService;
+    private final PrayerSessionSelectionService selectionService;
 
-    public TimerController(TimerService timerService) {
+    public TimerController(TimerService timerService,
+                           PrayerSessionSelectionService selectionService) {
         this.timerService = timerService;
+        this.selectionService = selectionService;
     }
 
     @PostMapping("/start")
     @ResponseStatus(HttpStatus.CREATED)
     public SessionResponse start(@Valid @RequestBody StartSessionRequest req,
+                                  @CurrentGroupId Long groupId,
                                   @AuthUser Long userId) {
-        return timerService.start(req, userId);
+        SessionResponse response = timerService.start(req, userId);
+        if (req.prayerRequestIds() != null && !req.prayerRequestIds().isEmpty()) {
+            Long effectiveGroupId = req.groupId() != null ? req.groupId() : groupId;
+            selectionService.attach(req.id(), req.prayerRequestIds(), effectiveGroupId,
+                    Boolean.TRUE.equals(req.isPrivate()));
+        }
+        return response;
     }
 
     @PutMapping("/{id}/sync")
@@ -42,7 +54,9 @@ public class TimerController {
     @PutMapping("/{id}/stop")
     public SessionResponse stop(@PathVariable String id,
                                  @AuthUser Long userId) {
-        return timerService.stop(id, userId);
+        SessionResponse response = timerService.stop(id, userId);
+        selectionService.fulfilForSession(id, userId);
+        return response;
     }
 
     @GetMapping("/{id}")

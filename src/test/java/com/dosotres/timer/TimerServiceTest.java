@@ -81,7 +81,7 @@ class TimerServiceTest {
         when(groupRepository.findById(10L)).thenReturn(Optional.of(group));
         when(sessionPort.save(any(PrayerSession.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        SessionResponse response = service.start(new StartSessionRequest("uuid-1", 10L), 1L);
+        SessionResponse response = service.start(new StartSessionRequest("uuid-1", 10L, null, null), 1L);
 
         assertThat(response.id()).isEqualTo("uuid-1");
         assertThat(response.userId()).isEqualTo(1L);
@@ -98,7 +98,7 @@ class TimerServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(sessionPort.save(any(PrayerSession.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        SessionResponse response = service.start(new StartSessionRequest("uuid-2", null), 1L);
+        SessionResponse response = service.start(new StartSessionRequest("uuid-2", null, null, null), 1L);
 
         assertThat(response.groupId()).isNull();
     }
@@ -110,7 +110,7 @@ class TimerServiceTest {
 
         when(sessionPort.findActiveByUserId(1L)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.start(new StartSessionRequest("uuid-3", null), 1L))
+        assertThatThrownBy(() -> service.start(new StartSessionRequest("uuid-3", null, null, null), 1L))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("active prayer session");
     }

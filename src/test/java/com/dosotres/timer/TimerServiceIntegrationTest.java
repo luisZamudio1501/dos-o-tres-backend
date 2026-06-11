@@ -77,7 +77,7 @@ class TimerServiceIntegrationTest {
     @Test
     void startSyncStop_fullFlow() {
         SessionResponse started = timerService.start(
-                new StartSessionRequest("int-test-1", null), userId);
+                new StartSessionRequest("int-test-1", null, null, null), userId);
 
         assertThat(started.status()).isEqualTo("ACTIVE");
         assertThat(started.durationSeconds()).isZero();
