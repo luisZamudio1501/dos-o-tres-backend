@@ -41,10 +41,13 @@ public class PrayerRequest {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private PrayerRequestStatus status = PrayerRequestStatus.PENDING;
+    private PrayerRequestStatus status = PrayerRequestStatus.ACTIVE;
 
     @Column(name = "answered_at")
     private Instant answeredAt;
+
+    @Column(columnDefinition = "TEXT")
+    private String testimony;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -118,6 +121,14 @@ public class PrayerRequest {
 
     public void setAnsweredAt(Instant answeredAt) {
         this.answeredAt = answeredAt;
+    }
+
+    public String getTestimony() {
+        return testimony;
+    }
+
+    public void setTestimony(String testimony) {
+        this.testimony = testimony;
     }
 
     public Instant getCreatedAt() {

@@ -1,8 +1,11 @@
 package com.dosotres.prayer;
 
+import com.dosotres.activity.ActivityEventType;
+import com.dosotres.activity.ActivityService;
 import com.dosotres.common.exception.ConflictException;
 import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
+import com.dosotres.common.exception.ValidationException;
 import com.dosotres.group.Group;
 import com.dosotres.group.GroupMemberRepository;
 import com.dosotres.group.GroupRepository;
@@ -13,6 +16,7 @@ import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -26,17 +30,20 @@ public class PrayerRequestService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final UserRepository userRepository;
+    private final ActivityService activityService;
     private final Clock clock;
 
     public PrayerRequestService(PrayerRequestRepository prayerRequestRepository,
                                  GroupRepository groupRepository,
                                  GroupMemberRepository groupMemberRepository,
                                  UserRepository userRepository,
+                                 ActivityService activityService,
                                  Clock clock) {
         this.prayerRequestRepository = prayerRequestRepository;
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.userRepository = userRepository;
+        this.activityService = activityService;
         this.clock = clock;
     }
 
@@ -51,8 +58,11 @@ public class PrayerRequestService {
         pr.setAuthor(user);
         pr.setTitle(req.title());
         pr.setDescription(req.description());
-        pr.setStatus(PrayerRequestStatus.PENDING);
+        pr.setStatus(PrayerRequestStatus.ACTIVE);
         prayerRequestRepository.save(pr);
+
+        activityService.record(group, user, ActivityEventType.REQUEST_CREATED, false,
+                Map.of("prayerRequestId", pr.getId(), "prayerTitle", pr.getTitle()));
 
         return toResponse(pr);
     }
@@ -70,22 +80,21 @@ public class PrayerRequestService {
 
     @Transactional(readOnly = true)
     public PrayerRequestResponse getById(Long id, Long groupId) {
-        PrayerRequest pr = prayerRequestRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("PrayerRequest", "id", id));
-        if (!pr.getGroup().getId().equals(groupId)) {
-            throw new ResourceNotFoundException("PrayerRequest", "id+groupId", id + "+" + groupId);
-        }
+        PrayerRequest pr = findInGroup(id, groupId);
         return toResponse(pr);
     }
 
     public PrayerRequestResponse markAsAnswered(Long id, Long groupId, Long userId) {
-        PrayerRequest pr = prayerRequestRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("PrayerRequest", "id", id));
-        if (!pr.getGroup().getId().equals(groupId)) {
-            throw new ResourceNotFoundException("PrayerRequest", "id+groupId", id + "+" + groupId);
-        }
-        if (pr.getStatus() == PrayerRequestStatus.ANSWERED) {
-            throw new ConflictException("Prayer request is already answered");
+        return changeStatus(id, groupId, userId, PrayerRequestStatus.ANSWERED, null);
+    }
+
+    public PrayerRequestResponse changeStatus(Long id, Long groupId, Long userId,
+                                              PrayerRequestStatus newStatus, String testimony) {
+        PrayerRequest pr = findInGroup(id, groupId);
+
+        if (pr.getStatus() == newStatus) {
+            String label = newStatus == PrayerRequestStatus.ANSWERED ? "answered" : newStatus.name();
+            throw new ConflictException("Prayer request is already " + label);
         }
 
         boolean isAuthor = pr.getAuthor().getId().equals(userId);
@@ -94,14 +103,54 @@ public class PrayerRequestService {
                 .orElse(false);
 
         if (!isAuthor && !isAdmin) {
-            throw new ForbiddenException("Only the author or a group admin can mark a prayer request as answered");
+            throw new ForbiddenException("Only the author or a group admin can change the status");
         }
 
-        pr.setStatus(PrayerRequestStatus.ANSWERED);
-        pr.setAnsweredAt(Instant.now(clock));
+        boolean hasTestimony = testimony != null && !testimony.isBlank();
+        if (hasTestimony) {
+            if (newStatus != PrayerRequestStatus.ANSWERED) {
+                throw new ValidationException("El testimonio solo se puede escribir al marcar el pedido como respondido");
+            }
+            if (!isAuthor) {
+                throw new ForbiddenException("Only the author can write a testimony");
+            }
+        }
+
+        pr.setStatus(newStatus);
+        if (newStatus == PrayerRequestStatus.ANSWERED) {
+            pr.setAnsweredAt(Instant.now(clock));
+            pr.setTestimony(hasTestimony ? testimony.trim() : null);
+        } else {
+            pr.setAnsweredAt(null);
+            pr.setTestimony(null);
+        }
         prayerRequestRepository.save(pr);
 
+        User actor = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        activityService.record(pr.getGroup(), actor, eventTypeFor(newStatus), false,
+                Map.of("prayerRequestId", pr.getId(),
+                        "prayerTitle", pr.getTitle(),
+                        "hasTestimony", hasTestimony));
+
         return toResponse(pr);
+    }
+
+    private ActivityEventType eventTypeFor(PrayerRequestStatus status) {
+        return switch (status) {
+            case ANSWERED -> ActivityEventType.REQUEST_ANSWERED;
+            case ON_HOLD -> ActivityEventType.REQUEST_ON_HOLD;
+            case ACTIVE -> ActivityEventType.REQUEST_REACTIVATED;
+        };
+    }
+
+    private PrayerRequest findInGroup(Long id, Long groupId) {
+        PrayerRequest pr = prayerRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("PrayerRequest", "id", id));
+        if (!pr.getGroup().getId().equals(groupId)) {
+            throw new ResourceNotFoundException("PrayerRequest", "id+groupId", id + "+" + groupId);
+        }
+        return pr;
     }
 
     private PrayerRequestResponse toResponse(PrayerRequest pr) {
@@ -113,6 +162,7 @@ public class PrayerRequestService {
                 pr.getDescription(),
                 pr.getStatus().name(),
                 pr.getAnsweredAt() != null ? pr.getAnsweredAt().toString() : null,
+                pr.getTestimony(),
                 pr.getCreatedAt() != null ? pr.getCreatedAt().toString() : null,
                 0
         );

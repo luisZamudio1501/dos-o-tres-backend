@@ -41,6 +41,9 @@ public class PrayerCommitment {
     @Column(name = "fulfilled_at")
     private Instant fulfilledAt;
 
+    @Column(name = "is_private", nullable = false)
+    private boolean isPrivate = false;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "session_id")
     private PrayerSession session;
@@ -80,6 +83,9 @@ public class PrayerCommitment {
 
     public Instant getFulfilledAt() { return fulfilledAt; }
     public void setFulfilledAt(Instant fulfilledAt) { this.fulfilledAt = fulfilledAt; }
+
+    public boolean isPrivate() { return isPrivate; }
+    public void setPrivate(boolean isPrivate) { this.isPrivate = isPrivate; }
 
     public PrayerSession getSession() { return session; }
     public void setSession(PrayerSession session) { this.session = session; }

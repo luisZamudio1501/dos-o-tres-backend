@@ -1,5 +1,7 @@
 package com.dosotres.prayer;
 
+import com.dosotres.activity.ActivityEventType;
+import com.dosotres.activity.ActivityService;
 import com.dosotres.common.exception.ConflictException;
 import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
@@ -18,6 +20,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Transactional
@@ -27,17 +30,20 @@ public class PrayerCommitmentService {
     private final PrayerRequestRepository prayerRequestRepository;
     private final UserRepository userRepository;
     private final PrayerSessionPort sessionPort;
+    private final ActivityService activityService;
     private final Clock clock;
 
     public PrayerCommitmentService(PrayerCommitmentRepository commitmentRepository,
                                     PrayerRequestRepository prayerRequestRepository,
                                     UserRepository userRepository,
                                     PrayerSessionPort sessionPort,
+                                    ActivityService activityService,
                                     Clock clock) {
         this.commitmentRepository = commitmentRepository;
         this.prayerRequestRepository = prayerRequestRepository;
         this.userRepository = userRepository;
         this.sessionPort = sessionPort;
+        this.activityService = activityService;
         this.clock = clock;
     }
 
@@ -115,11 +121,21 @@ public class PrayerCommitmentService {
             throw new ValidationException("Necesitás tener el cronómetro activo para marcar el cumplimiento");
         }
 
+        boolean isPrivate = Boolean.TRUE.equals(req.isPrivate());
+
         commitment.setFulfilled(true);
         commitment.setFulfilledAt(Instant.now(clock));
+        commitment.setPrivate(isPrivate);
         commitment.setSession(session);
 
         commitmentRepository.save(commitment);
+
+        PrayerRequest prayerRequest = commitment.getPrayerRequest();
+        activityService.record(prayerRequest.getGroup(), commitment.getUser(),
+                ActivityEventType.COMMITMENT_FULFILLED, isPrivate,
+                Map.of("prayerRequestId", prayerRequest.getId(),
+                        "prayerTitle", prayerRequest.getTitle()));
+
         return toResponse(commitment);
     }
 

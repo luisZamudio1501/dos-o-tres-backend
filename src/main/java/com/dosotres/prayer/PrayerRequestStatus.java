@@ -1,6 +1,7 @@
 package com.dosotres.prayer;
 
 public enum PrayerRequestStatus {
-    PENDING,
+    ACTIVE,
+    ON_HOLD,
     ANSWERED
 }

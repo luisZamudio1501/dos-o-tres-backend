@@ -1,5 +1,6 @@
 package com.dosotres.prayer;
 
+import com.dosotres.prayer.dto.ChangeStatusRequest;
 import com.dosotres.prayer.dto.CreatePrayerRequest;
 import com.dosotres.prayer.dto.PrayerRequestResponse;
 import com.dosotres.security.annotations.AuthUser;
@@ -56,5 +57,13 @@ public class PrayerRequestController {
                                                  @CurrentGroupId Long groupId,
                                                  @AuthUser Long userId) {
         return prayerRequestService.markAsAnswered(id, groupId, userId);
+    }
+
+    @PatchMapping("/{id}/status")
+    public PrayerRequestResponse changeStatus(@PathVariable Long id,
+                                               @Valid @RequestBody ChangeStatusRequest req,
+                                               @CurrentGroupId Long groupId,
+                                               @AuthUser Long userId) {
+        return prayerRequestService.changeStatus(id, groupId, userId, req.status(), req.testimony());
     }
 }

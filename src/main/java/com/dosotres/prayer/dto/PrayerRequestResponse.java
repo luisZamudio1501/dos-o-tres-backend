@@ -8,6 +8,7 @@ public record PrayerRequestResponse(
         String description,
         String status,
         String answeredAt,
+        String testimony,
         String createdAt,
         int commitmentCount
 ) {}

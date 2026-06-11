@@ -101,7 +101,7 @@ public class DataSeeder implements ApplicationRunner {
         pr1.setAuthor(demo);
         pr1.setTitle("Salud para mamá");
         pr1.setDescription("Está pasando por un tratamiento médico. Oremos por sanidad completa.");
-        pr1.setStatus(PrayerRequestStatus.PENDING);
+        pr1.setStatus(PrayerRequestStatus.ACTIVE);
         pr1 = prayerRequestRepository.save(pr1);
 
         PrayerRequest pr2 = new PrayerRequest();
@@ -109,7 +109,7 @@ public class DataSeeder implements ApplicationRunner {
         pr2.setAuthor(demo2);
         pr2.setTitle("Trabajo nuevo para Juan");
         pr2.setDescription("Lleva 3 meses buscando empleo. Pedimos puertas abiertas.");
-        pr2.setStatus(PrayerRequestStatus.PENDING);
+        pr2.setStatus(PrayerRequestStatus.ACTIVE);
         pr2 = prayerRequestRepository.save(pr2);
 
         PrayerRequest pr3 = new PrayerRequest();

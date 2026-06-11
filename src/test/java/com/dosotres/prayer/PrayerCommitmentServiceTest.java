@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.dosotres.activity.ActivityService;
 import com.dosotres.common.exception.ConflictException;
 import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
@@ -44,12 +45,14 @@ class PrayerCommitmentServiceTest {
     private UserRepository userRepository;
     @Mock
     private PrayerSessionPort sessionPort;
+    @Mock
+    private ActivityService activityService;
 
     private PrayerCommitmentService service;
 
     @BeforeEach
     void setUp() {
-        service = new PrayerCommitmentService(commitmentRepository, prayerRequestRepository, userRepository, sessionPort, FIXED_CLOCK);
+        service = new PrayerCommitmentService(commitmentRepository, prayerRequestRepository, userRepository, sessionPort, activityService, FIXED_CLOCK);
     }
 
     private Group makeGroup(Long id) {
@@ -70,7 +73,7 @@ class PrayerCommitmentServiceTest {
         pr.setId(id);
         pr.setGroup(group);
         pr.setTitle("Test prayer");
-        pr.setStatus(PrayerRequestStatus.PENDING);
+        pr.setStatus(PrayerRequestStatus.ACTIVE);
         return pr;
     }
 
@@ -226,7 +229,7 @@ class PrayerCommitmentServiceTest {
         when(sessionPort.findById("session-1")).thenReturn(Optional.of(session));
         when(commitmentRepository.save(any(PrayerCommitment.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        CommitmentResponse response = service.fulfil(100L, new FulfilCommitmentRequest("session-1"), 1L);
+        CommitmentResponse response = service.fulfil(100L, new FulfilCommitmentRequest("session-1", false), 1L);
 
         assertThat(response.fulfilled()).isTrue();
         assertThat(response.fulfilledAt()).isNotNull();
@@ -242,7 +245,7 @@ class PrayerCommitmentServiceTest {
 
         when(commitmentRepository.findById(100L)).thenReturn(Optional.of(commitment));
 
-        assertThatThrownBy(() -> service.fulfil(100L, new FulfilCommitmentRequest("session-1"), 1L))
+        assertThatThrownBy(() -> service.fulfil(100L, new FulfilCommitmentRequest("session-1", false), 1L))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("already fulfilled");
     }
@@ -258,7 +261,7 @@ class PrayerCommitmentServiceTest {
         when(commitmentRepository.findById(100L)).thenReturn(Optional.of(commitment));
         when(sessionPort.findById("session-1")).thenReturn(Optional.of(session));
 
-        assertThatThrownBy(() -> service.fulfil(100L, new FulfilCommitmentRequest("session-1"), 1L))
+        assertThatThrownBy(() -> service.fulfil(100L, new FulfilCommitmentRequest("session-1", false), 1L))
                 .isInstanceOf(ValidationException.class)
                 .hasMessageContaining("cronómetro activo");
     }
@@ -275,7 +278,7 @@ class PrayerCommitmentServiceTest {
         when(commitmentRepository.findById(100L)).thenReturn(Optional.of(commitment));
         when(sessionPort.findById("session-1")).thenReturn(Optional.of(session));
 
-        assertThatThrownBy(() -> service.fulfil(100L, new FulfilCommitmentRequest("session-1"), 1L))
+        assertThatThrownBy(() -> service.fulfil(100L, new FulfilCommitmentRequest("session-1", false), 1L))
                 .isInstanceOf(ForbiddenException.class);
     }
 }

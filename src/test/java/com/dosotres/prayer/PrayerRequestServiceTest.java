@@ -6,8 +6,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
+import com.dosotres.activity.ActivityService;
 import com.dosotres.common.exception.ConflictException;
 import com.dosotres.common.exception.ForbiddenException;
+import com.dosotres.common.exception.ValidationException;
 import com.dosotres.group.Group;
 import com.dosotres.group.GroupMember;
 import com.dosotres.group.GroupMemberRepository;
@@ -43,6 +45,8 @@ class PrayerRequestServiceTest {
     private GroupMemberRepository groupMemberRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private ActivityService activityService;
 
     private final Clock fixedClock = Clock.fixed(Instant.parse("2026-05-26T12:00:00Z"), ZoneId.of("UTC"));
 
@@ -50,7 +54,7 @@ class PrayerRequestServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PrayerRequestService(prayerRequestRepository, groupRepository, groupMemberRepository, userRepository, fixedClock);
+        service = new PrayerRequestService(prayerRequestRepository, groupRepository, groupMemberRepository, userRepository, activityService, fixedClock);
     }
 
     private Group makeGroup(Long id) {
@@ -78,7 +82,7 @@ class PrayerRequestServiceTest {
     }
 
     @Test
-    void create_setsPendingStatus() {
+    void create_setsActiveStatus() {
         Group group = makeGroup(1L);
         User user = makeUser(1L, "Luis");
 
@@ -94,7 +98,7 @@ class PrayerRequestServiceTest {
         PrayerRequestResponse response = service.create(
                 new CreatePrayerRequest("Salud para mamá", "Por favor orar"), 1L, 1L);
 
-        assertThat(response.status()).isEqualTo("PENDING");
+        assertThat(response.status()).isEqualTo("ACTIVE");
         assertThat(response.title()).isEqualTo("Salud para mamá");
         assertThat(response.authorName()).isEqualTo("Luis");
         assertThat(response.answeredAt()).isNull();
@@ -104,23 +108,23 @@ class PrayerRequestServiceTest {
     void listByGroup_withStatusFilter_usesFindByGroupIdAndStatus() {
         Group group = makeGroup(1L);
         User user = makeUser(1L, "Luis");
-        PrayerRequest pr = makePrayerRequest(10L, group, user, PrayerRequestStatus.PENDING);
+        PrayerRequest pr = makePrayerRequest(10L, group, user, PrayerRequestStatus.ACTIVE);
 
         Pageable pageable = PageRequest.of(0, 10);
-        when(prayerRequestRepository.findByGroupIdAndStatus(eq(1L), eq(PrayerRequestStatus.PENDING), any(Pageable.class)))
+        when(prayerRequestRepository.findByGroupIdAndStatus(eq(1L), eq(PrayerRequestStatus.ACTIVE), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(pr), pageable, 1));
 
-        Page<PrayerRequestResponse> result = service.listByGroup(1L, PrayerRequestStatus.PENDING, pageable);
+        Page<PrayerRequestResponse> result = service.listByGroup(1L, PrayerRequestStatus.ACTIVE, pageable);
 
         assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).status()).isEqualTo("PENDING");
+        assertThat(result.getContent().get(0).status()).isEqualTo("ACTIVE");
     }
 
     @Test
     void listByGroup_withoutStatus_usesFindByGroupId() {
         Group group = makeGroup(1L);
         User user = makeUser(1L, "Luis");
-        PrayerRequest pr1 = makePrayerRequest(10L, group, user, PrayerRequestStatus.PENDING);
+        PrayerRequest pr1 = makePrayerRequest(10L, group, user, PrayerRequestStatus.ACTIVE);
         PrayerRequest pr2 = makePrayerRequest(11L, group, user, PrayerRequestStatus.ANSWERED);
 
         Pageable pageable = PageRequest.of(0, 10);
@@ -136,10 +140,11 @@ class PrayerRequestServiceTest {
     void markAsAnswered_authorCanMark() {
         Group group = makeGroup(1L);
         User author = makeUser(1L, "Luis");
-        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.PENDING);
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
 
         when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
         when(prayerRequestRepository.save(any(PrayerRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(author));
 
         PrayerRequestResponse response = service.markAsAnswered(10L, 1L, 1L);
 
@@ -152,7 +157,7 @@ class PrayerRequestServiceTest {
         Group group = makeGroup(1L);
         User author = makeUser(1L, "Luis");
         User admin = makeUser(2L, "Admin");
-        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.PENDING);
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
 
         GroupMember adminMember = new GroupMember();
         adminMember.setRole(GroupRole.ADMIN);
@@ -160,6 +165,7 @@ class PrayerRequestServiceTest {
         when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
         when(groupMemberRepository.findByGroupIdAndUserId(1L, 2L)).thenReturn(Optional.of(adminMember));
         when(prayerRequestRepository.save(any(PrayerRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(admin));
 
         PrayerRequestResponse response = service.markAsAnswered(10L, 1L, 2L);
 
@@ -170,7 +176,7 @@ class PrayerRequestServiceTest {
     void markAsAnswered_nonAuthorMemberThrowsForbidden() {
         Group group = makeGroup(1L);
         User author = makeUser(1L, "Luis");
-        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.PENDING);
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
 
         GroupMember member = new GroupMember();
         member.setRole(GroupRole.MEMBER);
@@ -193,5 +199,70 @@ class PrayerRequestServiceTest {
         assertThatThrownBy(() -> service.markAsAnswered(10L, 1L, 1L))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("already answered");
+    }
+
+    @Test
+    void changeStatus_authorPutsRequestOnHold() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+        when(prayerRequestRepository.save(any(PrayerRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(author));
+
+        PrayerRequestResponse response = service.changeStatus(10L, 1L, 1L, PrayerRequestStatus.ON_HOLD, null);
+
+        assertThat(response.status()).isEqualTo("ON_HOLD");
+        assertThat(response.answeredAt()).isNull();
+    }
+
+    @Test
+    void changeStatus_answeredWithTestimonySavesIt() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+        when(prayerRequestRepository.save(any(PrayerRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(author));
+
+        PrayerRequestResponse response = service.changeStatus(
+                10L, 1L, 1L, PrayerRequestStatus.ANSWERED, "¡Dios respondió! Consiguió el trabajo.");
+
+        assertThat(response.status()).isEqualTo("ANSWERED");
+        assertThat(response.testimony()).isEqualTo("¡Dios respondió! Consiguió el trabajo.");
+        assertThat(response.answeredAt()).isNotNull();
+    }
+
+    @Test
+    void changeStatus_testimonyByNonAuthorThrowsForbidden() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
+
+        GroupMember adminMember = new GroupMember();
+        adminMember.setRole(GroupRole.ADMIN);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+        when(groupMemberRepository.findByGroupIdAndUserId(1L, 2L)).thenReturn(Optional.of(adminMember));
+
+        assertThatThrownBy(() -> service.changeStatus(
+                10L, 1L, 2L, PrayerRequestStatus.ANSWERED, "Testimonio ajeno"))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("author");
+    }
+
+    @Test
+    void changeStatus_testimonyOnNonAnsweredThrowsValidation() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+
+        assertThatThrownBy(() -> service.changeStatus(
+                10L, 1L, 1L, PrayerRequestStatus.ON_HOLD, "No corresponde acá"))
+                .isInstanceOf(ValidationException.class);
     }
 }
