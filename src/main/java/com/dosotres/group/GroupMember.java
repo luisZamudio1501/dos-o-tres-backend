@@ -91,6 +91,10 @@ public class GroupMember {
         return joinedAt;
     }
 
+    public void setJoinedAt(Instant joinedAt) {
+        this.joinedAt = joinedAt;
+    }
+
     public Instant getUpdatedAt() {
         return updatedAt;
     }

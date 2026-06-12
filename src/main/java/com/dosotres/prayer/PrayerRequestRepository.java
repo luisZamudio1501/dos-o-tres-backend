@@ -1,5 +1,6 @@
 package com.dosotres.prayer;
 
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,4 +12,6 @@ public interface PrayerRequestRepository extends JpaRepository<PrayerRequest, Lo
     Page<PrayerRequest> findByGroupId(Long groupId, Pageable pageable);
 
     long countByGroupIdAndStatus(Long groupId, PrayerRequestStatus status);
+
+    List<PrayerRequest> findByAuthorIdAndGroupIdAndStatus(Long authorId, Long groupId, PrayerRequestStatus status);
 }

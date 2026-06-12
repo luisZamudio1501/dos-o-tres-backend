@@ -1,13 +1,22 @@
 package com.dosotres.group;
 
-import com.dosotres.common.exception.ConflictException;
+import com.dosotres.activity.ActivityEventType;
+import com.dosotres.activity.ActivityService;
+import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
+import com.dosotres.common.exception.ValidationException;
 import com.dosotres.group.dto.CreateGroupRequest;
 import com.dosotres.group.dto.GroupMemberResponse;
 import com.dosotres.group.dto.GroupResponse;
+import com.dosotres.prayer.PrayerCommitment;
+import com.dosotres.prayer.PrayerRequest;
+import com.dosotres.prayer.PrayerRequestRepository;
+import com.dosotres.prayer.PrayerCommitmentRepository;
+import com.dosotres.prayer.PrayerRequestStatus;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,13 +28,22 @@ public class GroupService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final UserRepository userRepository;
+    private final PrayerRequestRepository prayerRequestRepository;
+    private final PrayerCommitmentRepository prayerCommitmentRepository;
+    private final ActivityService activityService;
 
     public GroupService(GroupRepository groupRepository,
                         GroupMemberRepository groupMemberRepository,
-                        UserRepository userRepository) {
+                        UserRepository userRepository,
+                        PrayerRequestRepository prayerRequestRepository,
+                        PrayerCommitmentRepository prayerCommitmentRepository,
+                        ActivityService activityService) {
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.userRepository = userRepository;
+        this.prayerRequestRepository = prayerRequestRepository;
+        this.prayerCommitmentRepository = prayerCommitmentRepository;
+        this.activityService = activityService;
     }
 
     public GroupResponse create(CreateGroupRequest req, Long userId) {
@@ -59,25 +77,93 @@ public class GroupService {
                 .toList();
     }
 
+    /**
+     * Unión por código: idempotente (regla D2 — fricción mínima). Si el usuario
+     * ya es miembro, devuelve el grupo en lugar de fallar.
+     */
     public GroupResponse joinByInviteCode(String inviteCode, Long userId) {
         Group group = groupRepository.findByInviteCode(inviteCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Group", "inviteCode", inviteCode));
 
-        if (groupMemberRepository.existsByGroupIdAndUserId(group.getId(), userId)) {
-            throw new ConflictException("User is already a member of this group");
+        GroupRole role = groupMemberRepository.findByGroupIdAndUserId(group.getId(), userId)
+                .map(GroupMember::getRole)
+                .orElse(null);
+
+        if (role == null) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+            GroupMember member = new GroupMember();
+            member.setGroup(group);
+            member.setUser(user);
+            member.setRole(GroupRole.MEMBER);
+            groupMemberRepository.save(member);
+            role = GroupRole.MEMBER;
+
+            activityService.record(group, user, ActivityEventType.MEMBER_JOINED, false, Map.of());
         }
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-
-        GroupMember member = new GroupMember();
-        member.setGroup(group);
-        member.setUser(user);
-        member.setRole(GroupRole.MEMBER);
-        groupMemberRepository.save(member);
-
         int memberCount = groupMemberRepository.findByGroupId(group.getId()).size();
-        return toGroupResponse(group, memberCount, GroupRole.MEMBER);
+        return toGroupResponse(group, memberCount, role);
+    }
+
+    /** Regenera el token de invitación (regla D3 — blindar ante filtraciones). Solo admin. */
+    public GroupResponse regenerateInviteCode(Long groupId, Long actingUserId) {
+        GroupMember acting = requireAdmin(groupId, actingUserId);
+        Group group = acting.getGroup();
+        group.setInviteCode(UUID.randomUUID().toString());
+        groupRepository.save(group);
+
+        int memberCount = groupMemberRepository.findByGroupId(groupId).size();
+        return toGroupResponse(group, memberCount, acting.getRole());
+    }
+
+    /**
+     * Expulsión de miembro (regla D4): hard delete de compromisos no cumplidos,
+     * soft delete de sus pedidos (pasan a ON_HOLD), historial de cumplimientos intacto.
+     */
+    public void removeMember(Long groupId, Long targetUserId, Long actingUserId) {
+        requireAdmin(groupId, actingUserId);
+
+        if (targetUserId.equals(actingUserId)) {
+            throw new ValidationException("No podés quitarte a vos mismo del grupo");
+        }
+
+        GroupMember target = groupMemberRepository.findByGroupIdAndUserId(groupId, targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("GroupMember", "groupId+userId",
+                        groupId + "+" + targetUserId));
+
+        List<PrayerCommitment> pendingCommitments = prayerCommitmentRepository
+                .findByUserIdAndPrayerRequestGroupIdAndFulfilledFalse(targetUserId, groupId);
+        prayerCommitmentRepository.deleteAll(pendingCommitments);
+
+        List<PrayerRequest> activeRequests = prayerRequestRepository
+                .findByAuthorIdAndGroupIdAndStatus(targetUserId, groupId, PrayerRequestStatus.ACTIVE);
+        for (PrayerRequest pr : activeRequests) {
+            pr.setStatus(PrayerRequestStatus.ON_HOLD);
+        }
+        prayerRequestRepository.saveAll(activeRequests);
+
+        groupMemberRepository.delete(target);
+    }
+
+    /** Nombra admin a un miembro existente. Solo admin. */
+    public GroupMemberResponse promoteToAdmin(Long groupId, Long targetUserId, Long actingUserId) {
+        requireAdmin(groupId, actingUserId);
+
+        GroupMember target = groupMemberRepository.findByGroupIdAndUserId(groupId, targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("GroupMember", "groupId+userId",
+                        groupId + "+" + targetUserId));
+
+        target.setRole(GroupRole.ADMIN);
+        groupMemberRepository.save(target);
+
+        return new GroupMemberResponse(
+                target.getUser().getId(),
+                target.getUser().getDisplayName(),
+                target.getRole().name(),
+                target.getJoinedAt().toString()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -93,7 +179,10 @@ public class GroupService {
     }
 
     @Transactional(readOnly = true)
-    public List<GroupMemberResponse> getMembers(Long groupId) {
+    public List<GroupMemberResponse> getMembers(Long groupId, Long userId) {
+        groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new ForbiddenException("Only group members can see the member list"));
+
         List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
         return members.stream()
                 .map(m -> new GroupMemberResponse(
@@ -103,6 +192,16 @@ public class GroupService {
                         m.getJoinedAt().toString()
                 ))
                 .toList();
+    }
+
+    private GroupMember requireAdmin(Long groupId, Long userId) {
+        GroupMember member = groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("GroupMember", "groupId+userId",
+                        groupId + "+" + userId));
+        if (member.getRole() != GroupRole.ADMIN) {
+            throw new ForbiddenException("Only a group admin can perform this action");
+        }
+        return member;
     }
 
     private GroupResponse toGroupResponse(Group group, int memberCount, GroupRole role) {

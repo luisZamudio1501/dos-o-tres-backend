@@ -8,7 +8,9 @@ import com.dosotres.security.annotations.AuthUser;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -51,7 +53,29 @@ public class GroupController {
     }
 
     @GetMapping("/{id}/members")
-    public List<GroupMemberResponse> getMembers(@PathVariable Long id) {
-        return groupService.getMembers(id);
+    public List<GroupMemberResponse> getMembers(@PathVariable Long id,
+                                                @AuthUser Long userId) {
+        return groupService.getMembers(id, userId);
+    }
+
+    @PostMapping("/{id}/invite-code")
+    public GroupResponse regenerateInviteCode(@PathVariable Long id,
+                                              @AuthUser Long userId) {
+        return groupService.regenerateInviteCode(id, userId);
+    }
+
+    @DeleteMapping("/{id}/members/{memberUserId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeMember(@PathVariable Long id,
+                             @PathVariable Long memberUserId,
+                             @AuthUser Long userId) {
+        groupService.removeMember(id, memberUserId, userId);
+    }
+
+    @PatchMapping("/{id}/members/{memberUserId}/promote")
+    public GroupMemberResponse promoteToAdmin(@PathVariable Long id,
+                                              @PathVariable Long memberUserId,
+                                              @AuthUser Long userId) {
+        return groupService.promoteToAdmin(id, memberUserId, userId);
     }
 }

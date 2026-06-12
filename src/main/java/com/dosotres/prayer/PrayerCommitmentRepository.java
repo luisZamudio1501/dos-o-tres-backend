@@ -15,4 +15,6 @@ public interface PrayerCommitmentRepository extends JpaRepository<PrayerCommitme
 
     Optional<PrayerCommitment> findByPrayerRequestIdAndUserIdAndCommittedDate(
             Long requestId, Long userId, LocalDate date);
+
+    List<PrayerCommitment> findByUserIdAndPrayerRequestGroupIdAndFulfilledFalse(Long userId, Long groupId);
 }

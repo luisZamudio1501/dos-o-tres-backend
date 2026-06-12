@@ -32,9 +32,9 @@ public class GroupContextFilter extends OncePerRequestFilter {
         this.objectMapper = objectMapper;
         this.excludedMatchers = List.of(
                 new AntPathRequestMatcher("/api/auth/**"),
-                new AntPathRequestMatcher("/api/groups", "GET"),
-                new AntPathRequestMatcher("/api/groups", "POST"),
-                new AntPathRequestMatcher("/api/groups/join", "POST"),
+                // Endpoints de grupos: la autorización va por path (membresía/rol
+                // verificados en GroupService), no por contexto X-Group-Id.
+                new AntPathRequestMatcher("/api/groups/**"),
                 new AntPathRequestMatcher("/actuator/**"),
                 new AntPathRequestMatcher("/swagger-ui/**"),
                 new AntPathRequestMatcher("/v3/api-docs/**")

@@ -1,5 +1,6 @@
-package com.dosotres.prayer;
+package com.dosotres.chain;
 
+import com.dosotres.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -13,22 +14,23 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 @Entity
-@Table(name = "session_requests")
-public class SessionPrayerRequest {
+@Table(name = "chain_commitments")
+public class ChainCommitment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "session_id", nullable = false, length = 36, columnDefinition = "CHAR(36)")
-    private String sessionId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chain_id", nullable = false)
+    private PrayerChain chain;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "prayer_request_id", nullable = false)
-    private PrayerRequest prayerRequest;
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
-    @Column(name = "is_private", nullable = false)
-    private boolean isPrivate = false;
+    @Column(name = "slot_index", nullable = false)
+    private int slotIndex;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -41,14 +43,14 @@ public class SessionPrayerRequest {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public String getSessionId() { return sessionId; }
-    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+    public PrayerChain getChain() { return chain; }
+    public void setChain(PrayerChain chain) { this.chain = chain; }
 
-    public PrayerRequest getPrayerRequest() { return prayerRequest; }
-    public void setPrayerRequest(PrayerRequest prayerRequest) { this.prayerRequest = prayerRequest; }
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
 
-    public boolean isPrivate() { return isPrivate; }
-    public void setPrivate(boolean isPrivate) { this.isPrivate = isPrivate; }
+    public int getSlotIndex() { return slotIndex; }
+    public void setSlotIndex(int slotIndex) { this.slotIndex = slotIndex; }
 
     public Instant getCreatedAt() { return createdAt; }
 }

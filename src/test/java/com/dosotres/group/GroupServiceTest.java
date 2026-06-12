@@ -3,13 +3,26 @@ package com.dosotres.group;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.dosotres.common.exception.ConflictException;
+import com.dosotres.activity.ActivityEventType;
+import com.dosotres.activity.ActivityService;
+import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
+import com.dosotres.common.exception.ValidationException;
 import com.dosotres.group.dto.CreateGroupRequest;
+import com.dosotres.group.dto.GroupMemberResponse;
 import com.dosotres.group.dto.GroupResponse;
+import com.dosotres.prayer.PrayerCommitment;
+import com.dosotres.prayer.PrayerRequest;
+import com.dosotres.prayer.PrayerCommitmentRepository;
+import com.dosotres.prayer.PrayerRequestRepository;
+import com.dosotres.prayer.PrayerRequestStatus;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.time.Instant;
@@ -31,19 +44,49 @@ class GroupServiceTest {
     private GroupMemberRepository groupMemberRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private PrayerRequestRepository prayerRequestRepository;
+    @Mock
+    private PrayerCommitmentRepository prayerCommitmentRepository;
+    @Mock
+    private ActivityService activityService;
 
     private GroupService groupService;
 
     @BeforeEach
     void setUp() {
-        groupService = new GroupService(groupRepository, groupMemberRepository, userRepository);
+        groupService = new GroupService(groupRepository, groupMemberRepository, userRepository,
+                prayerRequestRepository, prayerCommitmentRepository, activityService);
+    }
+
+    private User makeUser(Long id, String name) {
+        User u = new User();
+        u.setId(id);
+        u.setDisplayName(name);
+        return u;
+    }
+
+    private Group makeGroup(Long id, String name) {
+        Group g = new Group();
+        g.setId(id);
+        g.setName(name);
+        g.setInviteCode("inv-" + id);
+        g.onCreate();
+        return g;
+    }
+
+    private GroupMember makeMember(Group group, User user, GroupRole role) {
+        GroupMember m = new GroupMember();
+        m.setGroup(group);
+        m.setUser(user);
+        m.setRole(role);
+        m.setJoinedAt(Instant.parse("2026-06-01T00:00:00Z"));
+        return m;
     }
 
     @Test
     void create_assignsAdminRole() {
-        User user = new User();
-        user.setId(1L);
-        user.setDisplayName("Luis");
+        User user = makeUser(1L, "Luis");
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(groupRepository.save(any(Group.class))).thenAnswer(inv -> {
@@ -66,16 +109,20 @@ class GroupServiceTest {
     }
 
     @Test
-    void join_throwsConflictIfAlreadyMember() {
-        Group group = new Group();
-        group.setId(10L);
+    void join_isIdempotentWhenAlreadyMember() {
+        User user = makeUser(1L, "Luis");
+        Group group = makeGroup(10L, "Prayer Group");
+        GroupMember existing = makeMember(group, user, GroupRole.ADMIN);
 
-        when(groupRepository.findByInviteCode("abc-123")).thenReturn(Optional.of(group));
-        when(groupMemberRepository.existsByGroupIdAndUserId(10L, 1L)).thenReturn(true);
+        when(groupRepository.findByInviteCode("inv-10")).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 1L)).thenReturn(Optional.of(existing));
+        when(groupMemberRepository.findByGroupId(10L)).thenReturn(List.of(existing));
 
-        assertThatThrownBy(() -> groupService.joinByInviteCode("abc-123", 1L))
-                .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("already a member");
+        GroupResponse response = groupService.joinByInviteCode("inv-10", 1L);
+
+        assertThat(response.role()).isEqualTo("ADMIN");
+        verify(groupMemberRepository, never()).save(any(GroupMember.class));
+        verify(activityService, never()).record(any(), any(), any(), anyBoolean(), anyMap());
     }
 
     @Test
@@ -87,24 +134,17 @@ class GroupServiceTest {
     }
 
     @Test
-    void join_success_assignsMemberRole() {
-        User user = new User();
-        user.setId(2L);
-        user.setDisplayName("Ana");
+    void join_success_assignsMemberRoleAndRecordsEvent() {
+        User user = makeUser(2L, "Ana");
+        Group group = makeGroup(10L, "Prayer Group");
 
-        Group group = new Group();
-        group.setId(10L);
-        group.setName("Prayer Group");
-        group.setInviteCode("abc-123");
-        group.onCreate();
-
-        when(groupRepository.findByInviteCode("abc-123")).thenReturn(Optional.of(group));
-        when(groupMemberRepository.existsByGroupIdAndUserId(10L, 2L)).thenReturn(false);
+        when(groupRepository.findByInviteCode("inv-10")).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 2L)).thenReturn(Optional.empty());
         when(userRepository.findById(2L)).thenReturn(Optional.of(user));
         when(groupMemberRepository.save(any(GroupMember.class))).thenAnswer(inv -> inv.getArgument(0));
         when(groupMemberRepository.findByGroupId(10L)).thenReturn(List.of(new GroupMember()));
 
-        GroupResponse response = groupService.joinByInviteCode("abc-123", 2L);
+        GroupResponse response = groupService.joinByInviteCode("inv-10", 2L);
 
         assertThat(response.role()).isEqualTo("MEMBER");
         assertThat(response.name()).isEqualTo("Prayer Group");
@@ -112,35 +152,16 @@ class GroupServiceTest {
         ArgumentCaptor<GroupMember> captor = ArgumentCaptor.forClass(GroupMember.class);
         verify(groupMemberRepository).save(captor.capture());
         assertThat(captor.getValue().getRole()).isEqualTo(GroupRole.MEMBER);
+        verify(activityService).record(eq(group), eq(user), eq(ActivityEventType.MEMBER_JOINED), eq(false), anyMap());
     }
 
     @Test
     void listMyGroups_returnsGroupsForUser() {
-        User user = new User();
-        user.setId(1L);
-        user.setDisplayName("Luis");
-
-        Group group1 = new Group();
-        group1.setId(10L);
-        group1.setName("Group A");
-        group1.setInviteCode("inv-1");
-        group1.onCreate();
-
-        Group group2 = new Group();
-        group2.setId(20L);
-        group2.setName("Group B");
-        group2.setInviteCode("inv-2");
-        group2.onCreate();
-
-        GroupMember m1 = new GroupMember();
-        m1.setGroup(group1);
-        m1.setUser(user);
-        m1.setRole(GroupRole.ADMIN);
-
-        GroupMember m2 = new GroupMember();
-        m2.setGroup(group2);
-        m2.setUser(user);
-        m2.setRole(GroupRole.MEMBER);
+        User user = makeUser(1L, "Luis");
+        Group group1 = makeGroup(10L, "Group A");
+        Group group2 = makeGroup(20L, "Group B");
+        GroupMember m1 = makeMember(group1, user, GroupRole.ADMIN);
+        GroupMember m2 = makeMember(group2, user, GroupRole.MEMBER);
 
         when(groupMemberRepository.findByUserId(1L)).thenReturn(List.of(m1, m2));
         when(groupMemberRepository.findByGroupId(10L)).thenReturn(List.of(m1));
@@ -153,5 +174,97 @@ class GroupServiceTest {
         assertThat(groups.get(0).role()).isEqualTo("ADMIN");
         assertThat(groups.get(1).name()).isEqualTo("Group B");
         assertThat(groups.get(1).role()).isEqualTo("MEMBER");
+    }
+
+    @Test
+    void regenerateInviteCode_changesCodeWhenAdmin() {
+        User admin = makeUser(1L, "Luis");
+        Group group = makeGroup(10L, "Prayer Group");
+        String oldCode = group.getInviteCode();
+        GroupMember adminMember = makeMember(group, admin, GroupRole.ADMIN);
+
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 1L)).thenReturn(Optional.of(adminMember));
+        when(groupRepository.save(any(Group.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(groupMemberRepository.findByGroupId(10L)).thenReturn(List.of(adminMember));
+
+        GroupResponse response = groupService.regenerateInviteCode(10L, 1L);
+
+        assertThat(response.inviteCode()).isNotEqualTo(oldCode);
+    }
+
+    @Test
+    void regenerateInviteCode_forbiddenForMember() {
+        User member = makeUser(2L, "Ana");
+        Group group = makeGroup(10L, "Prayer Group");
+        GroupMember regular = makeMember(group, member, GroupRole.MEMBER);
+
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 2L)).thenReturn(Optional.of(regular));
+
+        assertThatThrownBy(() -> groupService.regenerateInviteCode(10L, 2L))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void removeMember_deletesPendingCommitmentsAndHoldsRequests() {
+        User admin = makeUser(1L, "Luis");
+        User target = makeUser(2L, "Ana");
+        Group group = makeGroup(10L, "Prayer Group");
+        GroupMember adminMember = makeMember(group, admin, GroupRole.ADMIN);
+        GroupMember targetMember = makeMember(group, target, GroupRole.MEMBER);
+
+        PrayerCommitment pending = new PrayerCommitment();
+        PrayerRequest activeRequest = new PrayerRequest();
+        activeRequest.setStatus(PrayerRequestStatus.ACTIVE);
+
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 1L)).thenReturn(Optional.of(adminMember));
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 2L)).thenReturn(Optional.of(targetMember));
+        when(prayerCommitmentRepository.findByUserIdAndPrayerRequestGroupIdAndFulfilledFalse(2L, 10L))
+                .thenReturn(List.of(pending));
+        when(prayerRequestRepository.findByAuthorIdAndGroupIdAndStatus(2L, 10L, PrayerRequestStatus.ACTIVE))
+                .thenReturn(List.of(activeRequest));
+
+        groupService.removeMember(10L, 2L, 1L);
+
+        verify(prayerCommitmentRepository).deleteAll(List.of(pending));
+        assertThat(activeRequest.getStatus()).isEqualTo(PrayerRequestStatus.ON_HOLD);
+        verify(groupMemberRepository).delete(targetMember);
+    }
+
+    @Test
+    void removeMember_cannotRemoveSelf() {
+        User admin = makeUser(1L, "Luis");
+        Group group = makeGroup(10L, "Prayer Group");
+        GroupMember adminMember = makeMember(group, admin, GroupRole.ADMIN);
+
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 1L)).thenReturn(Optional.of(adminMember));
+
+        assertThatThrownBy(() -> groupService.removeMember(10L, 1L, 1L))
+                .isInstanceOf(ValidationException.class);
+    }
+
+    @Test
+    void promoteToAdmin_changesRole() {
+        User admin = makeUser(1L, "Luis");
+        User target = makeUser(2L, "Ana");
+        Group group = makeGroup(10L, "Prayer Group");
+        GroupMember adminMember = makeMember(group, admin, GroupRole.ADMIN);
+        GroupMember targetMember = makeMember(group, target, GroupRole.MEMBER);
+
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 1L)).thenReturn(Optional.of(adminMember));
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 2L)).thenReturn(Optional.of(targetMember));
+        when(groupMemberRepository.save(any(GroupMember.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        GroupMemberResponse response = groupService.promoteToAdmin(10L, 2L, 1L);
+
+        assertThat(response.role()).isEqualTo("ADMIN");
+        assertThat(targetMember.getRole()).isEqualTo(GroupRole.ADMIN);
+    }
+
+    @Test
+    void getMembers_forbiddenForNonMembers() {
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> groupService.getMembers(10L, 99L))
+                .isInstanceOf(ForbiddenException.class);
     }
 }
