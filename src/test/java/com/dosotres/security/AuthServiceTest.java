@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
+import com.dosotres.common.exception.ConflictException;
 import com.dosotres.security.dto.AuthResponse;
 import com.dosotres.security.dto.LoginRequest;
 import com.dosotres.security.dto.RegisterRequest;
@@ -58,15 +59,15 @@ class AuthServiceTest {
     }
 
     @Test
-    void register_duplicateEmail_throwsEmailAlreadyExists() {
+    void register_duplicateEmail_throwsConflict() {
         User existing = new User();
         existing.setEmail("luis@test.com");
         when(userRepository.findByEmail("luis@test.com")).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> authService.register(
                 new RegisterRequest("luis@test.com", "Luis", "password123")))
-                .isInstanceOf(AuthService.EmailAlreadyExistsException.class)
-                .hasMessageContaining("luis@test.com");
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Ya existe una cuenta");
     }
 
     @Test

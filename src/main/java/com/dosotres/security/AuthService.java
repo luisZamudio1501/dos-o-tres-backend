@@ -1,5 +1,6 @@
 package com.dosotres.security;
 
+import com.dosotres.common.exception.ConflictException;
 import com.dosotres.security.dto.AuthResponse;
 import com.dosotres.security.dto.LoginRequest;
 import com.dosotres.security.dto.RegisterRequest;
@@ -29,7 +30,9 @@ public class AuthService {
 
     public AuthResponse register(RegisterRequest req) {
         if (userRepository.findByEmail(req.email()).isPresent()) {
-            throw new EmailAlreadyExistsException(req.email());
+            // ConflictException → GlobalExceptionHandler → 409 con message
+            // (fix 3.3: el 409 sin body dejaba el toast del frontend vacío).
+            throw new ConflictException("Ya existe una cuenta con ese email");
         }
 
         User user = new User();
@@ -55,15 +58,10 @@ public class AuthService {
         return new AuthResponse(user.getId(), user.getEmail(), user.getDisplayName(), token);
     }
 
-    public static class EmailAlreadyExistsException extends RuntimeException {
-        public EmailAlreadyExistsException(String email) {
-            super("Email already registered: " + email);
-        }
-    }
-
+    /** Manejada por GlobalExceptionHandler → 401 con message (fix 3.2). */
     public static class InvalidCredentialsException extends RuntimeException {
         public InvalidCredentialsException() {
-            super("Invalid email or password");
+            super("Email o contraseña incorrectos");
         }
     }
 }

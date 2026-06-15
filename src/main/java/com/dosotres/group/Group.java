@@ -28,6 +28,12 @@ public class Group {
     @Column(length = 500)
     private String description;
 
+    @Column(length = 7)
+    private String color;
+
+    @Column(name = "icon_emoji", length = 8)
+    private String iconEmoji;
+
     @Column(name = "invite_code", nullable = false, unique = true, length = 36)
     private String inviteCode;
 
@@ -75,6 +81,22 @@ public class Group {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
+    }
+
+    public String getIconEmoji() {
+        return iconEmoji;
+    }
+
+    public void setIconEmoji(String iconEmoji) {
+        this.iconEmoji = iconEmoji;
     }
 
     public String getInviteCode() {

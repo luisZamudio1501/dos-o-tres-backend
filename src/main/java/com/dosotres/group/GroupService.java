@@ -6,8 +6,10 @@ import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.common.exception.ValidationException;
 import com.dosotres.group.dto.CreateGroupRequest;
+import com.dosotres.group.dto.DeleteGroupRequest;
 import com.dosotres.group.dto.GroupMemberResponse;
 import com.dosotres.group.dto.GroupResponse;
+import com.dosotres.group.dto.UpdateGroupRequest;
 import com.dosotres.prayer.PrayerCommitment;
 import com.dosotres.prayer.PrayerRequest;
 import com.dosotres.prayer.PrayerRequestRepository;
@@ -133,18 +135,80 @@ public class GroupService {
                 .orElseThrow(() -> new ResourceNotFoundException("GroupMember", "groupId+userId",
                         groupId + "+" + targetUserId));
 
+        cleanupMemberData(groupId, targetUserId);
+        groupMemberRepository.delete(target);
+    }
+
+    /**
+     * Salir del grupo (autogestionado). Aplica la misma limpieza D4 que removeMember.
+     * Un admin único con otros miembros no puede irse sin promover a otro antes
+     * (evita grupos sin admin). Si es el último miembro, el grupo queda vacío
+     * y solo puede eliminarse explícitamente con deleteGroup.
+     */
+    public void leave(Long groupId, Long userId) {
+        GroupMember member = groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("GroupMember", "groupId+userId",
+                        groupId + "+" + userId));
+
+        List<GroupMember> allMembers = groupMemberRepository.findByGroupId(groupId);
+        boolean otherAdmins = allMembers.stream()
+                .anyMatch(m -> !m.getUser().getId().equals(userId) && m.getRole() == GroupRole.ADMIN);
+
+        if (member.getRole() == GroupRole.ADMIN && !otherAdmins && allMembers.size() > 1) {
+            throw new ValidationException("Promové a otro miembro como admin antes de salir del grupo");
+        }
+
+        cleanupMemberData(groupId, userId);
+        groupMemberRepository.delete(member);
+    }
+
+    /** Limpieza D4 de los datos de un usuario dentro de un grupo. */
+    private void cleanupMemberData(Long groupId, Long userId) {
         List<PrayerCommitment> pendingCommitments = prayerCommitmentRepository
-                .findByUserIdAndPrayerRequestGroupIdAndFulfilledFalse(targetUserId, groupId);
+                .findByUserIdAndPrayerRequestGroupIdAndFulfilledFalse(userId, groupId);
         prayerCommitmentRepository.deleteAll(pendingCommitments);
 
         List<PrayerRequest> activeRequests = prayerRequestRepository
-                .findByAuthorIdAndGroupIdAndStatus(targetUserId, groupId, PrayerRequestStatus.ACTIVE);
+                .findByAuthorIdAndGroupIdAndStatus(userId, groupId, PrayerRequestStatus.ACTIVE);
         for (PrayerRequest pr : activeRequests) {
             pr.setStatus(PrayerRequestStatus.ON_HOLD);
         }
         prayerRequestRepository.saveAll(activeRequests);
+    }
 
-        groupMemberRepository.delete(target);
+    /** Personalización del grupo (nombre/color/emoji). Solo admin. */
+    public GroupResponse update(Long groupId, UpdateGroupRequest req, Long actingUserId) {
+        GroupMember acting = requireAdmin(groupId, actingUserId);
+        Group group = acting.getGroup();
+
+        if (req.name() != null && !req.name().isBlank()) {
+            group.setName(req.name());
+        }
+        if (req.color() != null) {
+            group.setColor(req.color());
+        }
+        if (req.iconEmoji() != null) {
+            group.setIconEmoji(req.iconEmoji().isBlank() ? null : req.iconEmoji());
+        }
+        groupRepository.save(group);
+
+        int memberCount = groupMemberRepository.findByGroupId(groupId).size();
+        return toGroupResponse(group, memberCount, acting.getRole());
+    }
+
+    /**
+     * Elimina el grupo y todos sus datos (cascada vía V9). Acción destructiva
+     * irreversible: requiere que el admin tipee el nombre exacto del grupo.
+     */
+    public void deleteGroup(Long groupId, DeleteGroupRequest req, Long actingUserId) {
+        GroupMember acting = requireAdmin(groupId, actingUserId);
+        Group group = acting.getGroup();
+
+        if (!group.getName().equals(req.name())) {
+            throw new ValidationException("El nombre no coincide con el del grupo");
+        }
+
+        groupRepository.delete(group);
     }
 
     /** Nombra admin a un miembro existente. Solo admin. */
@@ -158,12 +222,7 @@ public class GroupService {
         target.setRole(GroupRole.ADMIN);
         groupMemberRepository.save(target);
 
-        return new GroupMemberResponse(
-                target.getUser().getId(),
-                target.getUser().getDisplayName(),
-                target.getRole().name(),
-                target.getJoinedAt().toString()
-        );
+        return toMemberResponse(target);
     }
 
     @Transactional(readOnly = true)
@@ -185,13 +244,23 @@ public class GroupService {
 
         List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
         return members.stream()
-                .map(m -> new GroupMemberResponse(
-                        m.getUser().getId(),
-                        m.getUser().getDisplayName(),
-                        m.getRole().name(),
-                        m.getJoinedAt().toString()
-                ))
+                .map(this::toMemberResponse)
                 .toList();
+    }
+
+    /**
+     * Ciudad/país del perfil (S5): visibles solo aquí, dentro de un grupo del
+     * que el solicitante ya es miembro (regla de privacidad — dato sensible).
+     */
+    private GroupMemberResponse toMemberResponse(GroupMember m) {
+        return new GroupMemberResponse(
+                m.getUser().getId(),
+                m.getUser().getDisplayName(),
+                m.getRole().name(),
+                m.getJoinedAt().toString(),
+                m.getUser().getCity(),
+                m.getUser().getCountry()
+        );
     }
 
     private GroupMember requireAdmin(Long groupId, Long userId) {
@@ -209,6 +278,8 @@ public class GroupService {
                 group.getId(),
                 group.getName(),
                 group.getDescription(),
+                group.getColor(),
+                group.getIconEmoji(),
                 group.getInviteCode(),
                 memberCount,
                 role.name(),

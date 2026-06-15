@@ -119,6 +119,33 @@ class PrayerCommitmentServiceTest {
     }
 
     @Test
+    void create_validationExceptionWhenRequestNotActive() {
+        Group group = makeGroup(1L);
+        PrayerRequest pr = makePrayerRequest(10L, group);
+        pr.setStatus(PrayerRequestStatus.ANSWERED);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+
+        assertThatThrownBy(() -> service.create(
+                new CreateCommitmentRequest(10L, "2026-05-27"), 1L, 1L))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("pedidos activos");
+    }
+
+    @Test
+    void create_validationExceptionWhenDateMalformed() {
+        Group group = makeGroup(1L);
+        PrayerRequest pr = makePrayerRequest(10L, group);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+
+        assertThatThrownBy(() -> service.create(
+                new CreateCommitmentRequest(10L, "27-05-2026"), 1L, 1L))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("Fecha inválida");
+    }
+
+    @Test
     void create_notFoundWhenPrayerRequestNotInGroup() {
         Group group = makeGroup(1L);
         PrayerRequest pr = makePrayerRequest(10L, group);

@@ -46,6 +46,8 @@ class PrayerRequestServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
+    private PrayerCommitmentRepository commitmentRepository;
+    @Mock
     private ActivityService activityService;
 
     private final Clock fixedClock = Clock.fixed(Instant.parse("2026-05-26T12:00:00Z"), ZoneId.of("UTC"));
@@ -54,7 +56,8 @@ class PrayerRequestServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PrayerRequestService(prayerRequestRepository, groupRepository, groupMemberRepository, userRepository, activityService, fixedClock);
+        service = new PrayerRequestService(prayerRequestRepository, groupRepository, groupMemberRepository,
+                userRepository, commitmentRepository, activityService, fixedClock);
     }
 
     private Group makeGroup(Long id) {

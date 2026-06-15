@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 
@@ -55,7 +56,18 @@ public class PrayerCommitmentService {
             throw new ResourceNotFoundException("PrayerRequest", "id+groupId", req.prayerRequestId() + "+" + groupId);
         }
 
-        LocalDate date = LocalDate.parse(req.committedDate());
+        // Fix 3.7: misma regla que la selección en cronómetro — solo pedidos activos.
+        if (prayerRequest.getStatus() != PrayerRequestStatus.ACTIVE) {
+            throw new ValidationException("Solo se pueden asumir compromisos sobre pedidos activos");
+        }
+
+        // Fix 3.6: fecha malformada era 500; ahora 400 con mensaje claro.
+        LocalDate date;
+        try {
+            date = LocalDate.parse(req.committedDate());
+        } catch (DateTimeParseException e) {
+            throw new ValidationException("Fecha inválida: " + req.committedDate());
+        }
 
         commitmentRepository.findByPrayerRequestIdAndUserIdAndCommittedDate(
                 req.prayerRequestId(), userId, date

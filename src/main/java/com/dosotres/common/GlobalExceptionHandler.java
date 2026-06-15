@@ -46,6 +46,13 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(409, ex.getMessage()));
     }
 
+    @ExceptionHandler(com.dosotres.security.AuthService.InvalidCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCredentials(
+            com.dosotres.security.AuthService.InvalidCredentialsException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ErrorResponse(401, ex.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
         Map<String, String> errors = new LinkedHashMap<>();

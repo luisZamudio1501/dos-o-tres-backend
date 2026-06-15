@@ -35,6 +35,9 @@ public class GroupContextFilter extends OncePerRequestFilter {
                 // Endpoints de grupos: la autorización va por path (membresía/rol
                 // verificados en GroupService), no por contexto X-Group-Id.
                 new AntPathRequestMatcher("/api/groups/**"),
+                // Perfil propio (S5): no depende de ningún grupo — un usuario
+                // recién registrado sin grupos también puede editarlo.
+                new AntPathRequestMatcher("/api/users/me"),
                 new AntPathRequestMatcher("/actuator/**"),
                 new AntPathRequestMatcher("/swagger-ui/**"),
                 new AntPathRequestMatcher("/v3/api-docs/**")

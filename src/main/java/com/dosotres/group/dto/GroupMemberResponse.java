@@ -4,5 +4,7 @@ public record GroupMemberResponse(
         Long userId,
         String displayName,
         String role,
-        String joinedAt
+        String joinedAt,
+        String city,
+        String country
 ) {}

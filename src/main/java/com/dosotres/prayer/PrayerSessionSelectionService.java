@@ -9,8 +9,10 @@ import com.dosotres.timer.port.PrayerSessionPort;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -87,7 +89,10 @@ public class PrayerSessionSelectionService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
 
         Instant now = Instant.now(clock);
-        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        // Fix 3.5: "hoy" en la zona del usuario, no UTC — si no, de noche en
+        // UTC-3 el cumplimiento automático no matchea el compromiso manual
+        // del día y se duplica con otra fecha.
+        LocalDate today = LocalDate.ofInstant(now, userZone(user));
         int fulfilled = 0;
 
         for (SessionPrayerRequest selection : selections) {
@@ -122,5 +127,15 @@ public class PrayerSessionSelectionService {
 
         log.info("Session fulfilment: sessionId={}, userId={}, fulfilled={}", sessionId, userId, fulfilled);
         return fulfilled;
+    }
+
+    private ZoneId userZone(User user) {
+        try {
+            return user.getTimezone() != null ? ZoneId.of(user.getTimezone()) : ZoneOffset.UTC;
+        } catch (DateTimeException e) {
+            log.warn("Invalid timezone '{}' for userId={}, falling back to UTC",
+                    user.getTimezone(), user.getId());
+            return ZoneOffset.UTC;
+        }
     }
 }

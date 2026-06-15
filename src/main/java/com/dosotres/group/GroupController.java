@@ -1,9 +1,11 @@
 package com.dosotres.group;
 
 import com.dosotres.group.dto.CreateGroupRequest;
+import com.dosotres.group.dto.DeleteGroupRequest;
 import com.dosotres.group.dto.GroupMemberResponse;
 import com.dosotres.group.dto.GroupResponse;
 import com.dosotres.group.dto.JoinGroupRequest;
+import com.dosotres.group.dto.UpdateGroupRequest;
 import com.dosotres.security.annotations.AuthUser;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -62,6 +64,27 @@ public class GroupController {
     public GroupResponse regenerateInviteCode(@PathVariable Long id,
                                               @AuthUser Long userId) {
         return groupService.regenerateInviteCode(id, userId);
+    }
+
+    @PatchMapping("/{id}")
+    public GroupResponse update(@PathVariable Long id,
+                                @Valid @RequestBody UpdateGroupRequest req,
+                                @AuthUser Long userId) {
+        return groupService.update(id, req, userId);
+    }
+
+    @DeleteMapping("/{id}/members/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void leave(@PathVariable Long id, @AuthUser Long userId) {
+        groupService.leave(id, userId);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteGroup(@PathVariable Long id,
+                            @Valid @RequestBody DeleteGroupRequest req,
+                            @AuthUser Long userId) {
+        groupService.deleteGroup(id, req, userId);
     }
 
     @DeleteMapping("/{id}/members/{memberUserId}")

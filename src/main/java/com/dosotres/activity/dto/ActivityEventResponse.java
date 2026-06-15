@@ -7,6 +7,7 @@ public record ActivityEventResponse(
         String type,
         Long actorId,
         String actorName,
+        String actorCountry,
         Map<String, Object> payload,
         String createdAt
 ) {}

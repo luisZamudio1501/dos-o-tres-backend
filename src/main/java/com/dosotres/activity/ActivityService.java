@@ -50,6 +50,8 @@ public class ActivityService {
                 event.getType().name(),
                 masked ? null : event.getActor().getId(),
                 masked ? null : event.getActor().getDisplayName(),
+                // País del perfil (S5): también se enmascara en eventos privados.
+                masked ? null : event.getActor().getCountry(),
                 deserialize(event.getPayload()),
                 event.getCreatedAt() != null ? event.getCreatedAt().toString() : null
         );

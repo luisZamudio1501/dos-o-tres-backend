@@ -35,6 +35,22 @@ public class User {
     @Column(nullable = false, length = 10)
     private String locale = "es";
 
+    // Perfil de congregación (S5) — todos opcionales, nunca en el registro.
+    // country = código ISO-3166-1 alfa-2.
+    // columnDefinition explícito: V7 lo crea como CHAR(2) y ddl-auto=validate
+    // exige coincidencia exacta (mismo caso que PrayerSession.id CHAR(36)).
+    @Column(length = 2, columnDefinition = "CHAR(2)")
+    private String country;
+
+    @Column(length = 100)
+    private String province;
+
+    @Column(length = 100)
+    private String city;
+
+    @Column(name = "church_name", length = 150)
+    private String churchName;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "subscription_tier", nullable = false)
     private SubscriptionTier subscriptionTier = SubscriptionTier.FREE;
@@ -106,6 +122,38 @@ public class User {
 
     public void setLocale(String locale) {
         this.locale = locale;
+    }
+
+    public String getCountry() {
+        return country;
+    }
+
+    public void setCountry(String country) {
+        this.country = country;
+    }
+
+    public String getProvince() {
+        return province;
+    }
+
+    public void setProvince(String province) {
+        this.province = province;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public String getChurchName() {
+        return churchName;
+    }
+
+    public void setChurchName(String churchName) {
+        this.churchName = churchName;
     }
 
     public SubscriptionTier getSubscriptionTier() {

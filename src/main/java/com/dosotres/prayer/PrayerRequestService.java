@@ -16,6 +16,8 @@ import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +32,7 @@ public class PrayerRequestService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final UserRepository userRepository;
+    private final PrayerCommitmentRepository commitmentRepository;
     private final ActivityService activityService;
     private final Clock clock;
 
@@ -37,12 +40,14 @@ public class PrayerRequestService {
                                  GroupRepository groupRepository,
                                  GroupMemberRepository groupMemberRepository,
                                  UserRepository userRepository,
+                                 PrayerCommitmentRepository commitmentRepository,
                                  ActivityService activityService,
                                  Clock clock) {
         this.prayerRequestRepository = prayerRequestRepository;
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.userRepository = userRepository;
+        this.commitmentRepository = commitmentRepository;
         this.activityService = activityService;
         this.clock = clock;
     }
@@ -64,7 +69,7 @@ public class PrayerRequestService {
         activityService.record(group, user, ActivityEventType.REQUEST_CREATED, false,
                 Map.of("prayerRequestId", pr.getId(), "prayerTitle", pr.getTitle()));
 
-        return toResponse(pr);
+        return toResponse(pr, 0); // recién creado: sin compromisos todavía
     }
 
     @Transactional(readOnly = true)
@@ -75,13 +80,22 @@ public class PrayerRequestService {
         } else {
             page = prayerRequestRepository.findByGroupId(groupId, pageable);
         }
-        return page.map(this::toResponse);
+
+        // Conteo de compromisos en UNA query agregada para toda la página (fix 3.4).
+        List<Long> ids = page.getContent().stream().map(PrayerRequest::getId).toList();
+        Map<Long, Long> counts = new HashMap<>();
+        if (!ids.isEmpty()) {
+            for (Object[] row : commitmentRepository.countGroupedByPrayerRequestIds(ids)) {
+                counts.put((Long) row[0], (Long) row[1]);
+            }
+        }
+        return page.map(pr -> toResponse(pr, counts.getOrDefault(pr.getId(), 0L).intValue()));
     }
 
     @Transactional(readOnly = true)
     public PrayerRequestResponse getById(Long id, Long groupId) {
         PrayerRequest pr = findInGroup(id, groupId);
-        return toResponse(pr);
+        return toResponse(pr, (int) commitmentRepository.countByPrayerRequestId(pr.getId()));
     }
 
     public PrayerRequestResponse markAsAnswered(Long id, Long groupId, Long userId) {
@@ -133,7 +147,7 @@ public class PrayerRequestService {
                         "prayerTitle", pr.getTitle(),
                         "hasTestimony", hasTestimony));
 
-        return toResponse(pr);
+        return toResponse(pr, (int) commitmentRepository.countByPrayerRequestId(pr.getId()));
     }
 
     private ActivityEventType eventTypeFor(PrayerRequestStatus status) {
@@ -153,7 +167,7 @@ public class PrayerRequestService {
         return pr;
     }
 
-    private PrayerRequestResponse toResponse(PrayerRequest pr) {
+    private PrayerRequestResponse toResponse(PrayerRequest pr, int commitmentCount) {
         return new PrayerRequestResponse(
                 pr.getId(),
                 pr.getAuthor().getId(),
@@ -164,7 +178,7 @@ public class PrayerRequestService {
                 pr.getAnsweredAt() != null ? pr.getAnsweredAt().toString() : null,
                 pr.getTestimony(),
                 pr.getCreatedAt() != null ? pr.getCreatedAt().toString() : null,
-                0
+                commitmentCount
         );
     }
 }

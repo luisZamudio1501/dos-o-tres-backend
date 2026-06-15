@@ -77,11 +77,12 @@ class TimerServiceTest {
         Group group = makeGroup(10L);
 
         when(sessionPort.findActiveByUserId(1L)).thenReturn(Optional.empty());
+        when(sessionPort.findById("uuid-1")).thenReturn(Optional.empty());
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(groupRepository.findById(10L)).thenReturn(Optional.of(group));
         when(sessionPort.save(any(PrayerSession.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        SessionResponse response = service.start(new StartSessionRequest("uuid-1", 10L, null, null), 1L);
+        SessionResponse response = service.start(new StartSessionRequest("uuid-1", null, null), 10L, 1L);
 
         assertThat(response.id()).isEqualTo("uuid-1");
         assertThat(response.userId()).isEqualTo(1L);
@@ -95,10 +96,11 @@ class TimerServiceTest {
         User user = makeUser(1L);
 
         when(sessionPort.findActiveByUserId(1L)).thenReturn(Optional.empty());
+        when(sessionPort.findById("uuid-2")).thenReturn(Optional.empty());
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(sessionPort.save(any(PrayerSession.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        SessionResponse response = service.start(new StartSessionRequest("uuid-2", null, null, null), 1L);
+        SessionResponse response = service.start(new StartSessionRequest("uuid-2", null, null), null, 1L);
 
         assertThat(response.groupId()).isNull();
     }
@@ -110,9 +112,22 @@ class TimerServiceTest {
 
         when(sessionPort.findActiveByUserId(1L)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.start(new StartSessionRequest("uuid-3", null, null, null), 1L))
+        assertThatThrownBy(() -> service.start(new StartSessionRequest("uuid-3", null, null), null, 1L))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("active prayer session");
+    }
+
+    @Test
+    void start_conflictsWhenSessionIdAlreadyExists() {
+        User otherUser = makeUser(99L);
+        PrayerSession existing = makeSession("uuid-taken", otherUser, SessionStatus.COMPLETED);
+
+        when(sessionPort.findActiveByUserId(1L)).thenReturn(Optional.empty());
+        when(sessionPort.findById("uuid-taken")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.start(new StartSessionRequest("uuid-taken", null, null), null, 1L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already exists");
     }
 
     @Test

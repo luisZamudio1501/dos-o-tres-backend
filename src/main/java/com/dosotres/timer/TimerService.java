@@ -41,9 +41,20 @@ public class TimerService {
         this.clock = clock;
     }
 
-    public SessionResponse start(StartSessionRequest req, Long userId) {
+    /**
+     * @param groupId contexto de grupo YA VALIDADO (header X-Group-Id,
+     *                membresía verificada por GroupContextFilter). Nunca se
+     *                acepta un groupId del body (fix 3.1).
+     */
+    public SessionResponse start(StartSessionRequest req, Long groupId, Long userId) {
         sessionPort.findActiveByUserId(userId).ifPresent(s -> {
             throw new ConflictException("User already has an active prayer session");
+        });
+
+        // El id de sesión lo genera el cliente (UUID, persistencia dual):
+        // rechazar ids ya existentes para que save() nunca pise otra fila.
+        sessionPort.findById(req.id()).ifPresent(s -> {
+            throw new ConflictException("A prayer session with this id already exists");
         });
 
         User user = userRepository.findById(userId)
@@ -59,9 +70,9 @@ public class TimerService {
         session.setStatus(SessionStatus.ACTIVE);
         session.setLastSyncAt(now);
 
-        if (req.groupId() != null) {
-            Group group = groupRepository.findById(req.groupId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Group", "id", req.groupId()));
+        if (groupId != null) {
+            Group group = groupRepository.findById(groupId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Group", "id", groupId));
             session.setGroup(group);
         }
 

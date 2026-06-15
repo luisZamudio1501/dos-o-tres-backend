@@ -35,10 +35,10 @@ public class TimerController {
     public SessionResponse start(@Valid @RequestBody StartSessionRequest req,
                                   @CurrentGroupId Long groupId,
                                   @AuthUser Long userId) {
-        SessionResponse response = timerService.start(req, userId);
+        // groupId viene del header X-Group-Id, validado por GroupContextFilter.
+        SessionResponse response = timerService.start(req, groupId, userId);
         if (req.prayerRequestIds() != null && !req.prayerRequestIds().isEmpty()) {
-            Long effectiveGroupId = req.groupId() != null ? req.groupId() : groupId;
-            selectionService.attach(req.id(), req.prayerRequestIds(), effectiveGroupId,
+            selectionService.attach(req.id(), req.prayerRequestIds(), groupId,
                     Boolean.TRUE.equals(req.isPrivate()));
         }
         return response;
