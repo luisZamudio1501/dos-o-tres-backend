@@ -33,6 +33,7 @@ public class PrayerRequestService {
     private final GroupMemberRepository groupMemberRepository;
     private final UserRepository userRepository;
     private final PrayerCommitmentRepository commitmentRepository;
+    private final SessionPrayerRequestRepository sessionPrayerRequestRepository;
     private final ActivityService activityService;
     private final Clock clock;
 
@@ -41,6 +42,7 @@ public class PrayerRequestService {
                                  GroupMemberRepository groupMemberRepository,
                                  UserRepository userRepository,
                                  PrayerCommitmentRepository commitmentRepository,
+                                 SessionPrayerRequestRepository sessionPrayerRequestRepository,
                                  ActivityService activityService,
                                  Clock clock) {
         this.prayerRequestRepository = prayerRequestRepository;
@@ -48,6 +50,7 @@ public class PrayerRequestService {
         this.groupMemberRepository = groupMemberRepository;
         this.userRepository = userRepository;
         this.commitmentRepository = commitmentRepository;
+        this.sessionPrayerRequestRepository = sessionPrayerRequestRepository;
         this.activityService = activityService;
         this.clock = clock;
     }
@@ -148,6 +151,27 @@ public class PrayerRequestService {
                         "hasTestimony", hasTestimony));
 
         return toResponse(pr, (int) commitmentRepository.countByPrayerRequestId(pr.getId()));
+    }
+
+    /**
+     * Elimina un pedido de oración. Regla de negocio: solo el administrador del
+     * grupo puede borrar (cualquier pedido del grupo). Un miembro no admin no
+     * puede borrar pedidos, ni siquiera los propios — solo puede salir del grupo.
+     */
+    public void delete(Long id, Long groupId, Long userId) {
+        PrayerRequest pr = findInGroup(id, groupId);
+
+        boolean isAdmin = groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
+                .map(m -> m.getRole() == GroupRole.ADMIN)
+                .orElse(false);
+        if (!isAdmin) {
+            throw new ForbiddenException("Only a group admin can delete prayer requests");
+        }
+
+        // FKs con RESTRICT: eliminar hijos antes que el pedido.
+        sessionPrayerRequestRepository.deleteByPrayerRequestId(id);
+        commitmentRepository.deleteByPrayerRequestId(id);
+        prayerRequestRepository.delete(pr);
     }
 
     private ActivityEventType eventTypeFor(PrayerRequestStatus status) {

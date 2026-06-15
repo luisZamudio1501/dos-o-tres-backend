@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.dosotres.activity.ActivityService;
@@ -48,6 +50,8 @@ class PrayerRequestServiceTest {
     @Mock
     private PrayerCommitmentRepository commitmentRepository;
     @Mock
+    private SessionPrayerRequestRepository sessionPrayerRequestRepository;
+    @Mock
     private ActivityService activityService;
 
     private final Clock fixedClock = Clock.fixed(Instant.parse("2026-05-26T12:00:00Z"), ZoneId.of("UTC"));
@@ -57,7 +61,7 @@ class PrayerRequestServiceTest {
     @BeforeEach
     void setUp() {
         service = new PrayerRequestService(prayerRequestRepository, groupRepository, groupMemberRepository,
-                userRepository, commitmentRepository, activityService, fixedClock);
+                userRepository, commitmentRepository, sessionPrayerRequestRepository, activityService, fixedClock);
     }
 
     private Group makeGroup(Long id) {
@@ -267,5 +271,41 @@ class PrayerRequestServiceTest {
         assertThatThrownBy(() -> service.changeStatus(
                 10L, 1L, 1L, PrayerRequestStatus.ON_HOLD, "No corresponde acá"))
                 .isInstanceOf(ValidationException.class);
+    }
+
+    @Test
+    void delete_adminRemovesRequestAndChildren() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
+
+        GroupMember adminMember = new GroupMember();
+        adminMember.setRole(GroupRole.ADMIN);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+        when(groupMemberRepository.findByGroupIdAndUserId(1L, 2L)).thenReturn(Optional.of(adminMember));
+
+        service.delete(10L, 1L, 2L);
+
+        verify(sessionPrayerRequestRepository).deleteByPrayerRequestId(10L);
+        verify(commitmentRepository).deleteByPrayerRequestId(10L);
+        verify(prayerRequestRepository).delete(pr);
+    }
+
+    @Test
+    void delete_nonAdminThrowsForbiddenAndDeletesNothing() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
+
+        GroupMember member = new GroupMember();
+        member.setRole(GroupRole.MEMBER);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+        when(groupMemberRepository.findByGroupIdAndUserId(1L, 1L)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> service.delete(10L, 1L, 1L))
+                .isInstanceOf(ForbiddenException.class);
+        verify(prayerRequestRepository, never()).delete(any(PrayerRequest.class));
     }
 }

@@ -26,4 +26,6 @@ public interface PrayerCommitmentRepository extends JpaRepository<PrayerCommitme
             Long requestId, Long userId, LocalDate date);
 
     List<PrayerCommitment> findByUserIdAndPrayerRequestGroupIdAndFulfilledFalse(Long userId, Long groupId);
+
+    void deleteByPrayerRequestId(Long requestId);
 }
