@@ -84,6 +84,20 @@ class GroupContextFilterTest {
     }
 
     @Test
+    void shouldBypassPersonalRoutes() throws Exception {
+        var request = createRequest("GET", "/api/me/prayer-requests");
+
+        assertThat(filter.shouldNotFilter(request)).isTrue();
+    }
+
+    @Test
+    void shouldBypassTimerRoutes() throws Exception {
+        var request = createRequest("POST", "/api/timer/start");
+
+        assertThat(filter.shouldNotFilter(request)).isTrue();
+    }
+
+    @Test
     void shouldReturn403WhenHeaderMissing() throws Exception {
         authenticateUser(1L);
         var request = new MockHttpServletRequest("GET", "/api/prayer-requests");

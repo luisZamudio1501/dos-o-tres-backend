@@ -4,6 +4,7 @@ import com.dosotres.activity.ActivityEventType;
 import com.dosotres.activity.ActivityService;
 import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.common.exception.ValidationException;
+import com.dosotres.group.GroupMemberRepository;
 import com.dosotres.timer.PrayerSession;
 import com.dosotres.timer.port.PrayerSessionPort;
 import com.dosotres.user.User;
@@ -38,6 +39,7 @@ public class PrayerSessionSelectionService {
     private final PrayerRequestRepository prayerRequestRepository;
     private final PrayerCommitmentRepository commitmentRepository;
     private final UserRepository userRepository;
+    private final GroupMemberRepository groupMemberRepository;
     private final PrayerSessionPort sessionPort;
     private final ActivityService activityService;
     private final Clock clock;
@@ -46,6 +48,7 @@ public class PrayerSessionSelectionService {
                                          PrayerRequestRepository prayerRequestRepository,
                                          PrayerCommitmentRepository commitmentRepository,
                                          UserRepository userRepository,
+                                         GroupMemberRepository groupMemberRepository,
                                          PrayerSessionPort sessionPort,
                                          ActivityService activityService,
                                          Clock clock) {
@@ -53,19 +56,33 @@ public class PrayerSessionSelectionService {
         this.prayerRequestRepository = prayerRequestRepository;
         this.commitmentRepository = commitmentRepository;
         this.userRepository = userRepository;
+        this.groupMemberRepository = groupMemberRepository;
         this.sessionPort = sessionPort;
         this.activityService = activityService;
         this.clock = clock;
     }
 
-    public void attach(String sessionId, List<Long> prayerRequestIds, Long groupId, boolean isPrivate) {
+    /**
+     * Adjunta los pedidos seleccionados a la sesión. Sesión unificada: el acceso
+     * se valida POR-PEDIDO contra el usuario (no contra un único grupo):
+     *  - PRIVATE → solo el autor/dueño.
+     *  - GROUP   → solo miembros de ese grupo.
+     * Un pedido sin acceso se reporta como inexistente (no se revela su existencia).
+     */
+    public void attach(String sessionId, List<Long> prayerRequestIds, Long userId, boolean isPrivate) {
         Set<Long> distinctIds = new LinkedHashSet<>(prayerRequestIds);
         for (Long requestId : distinctIds) {
             PrayerRequest pr = prayerRequestRepository.findById(requestId)
                     .orElseThrow(() -> new ResourceNotFoundException("PrayerRequest", "id", requestId));
-            if (!pr.getGroup().getId().equals(groupId)) {
-                throw new ResourceNotFoundException("PrayerRequest", "id+groupId", requestId + "+" + groupId);
+
+            boolean hasAccess = pr.getVisibility() == PrayerVisibility.PRIVATE
+                    ? pr.getAuthor().getId().equals(userId)
+                    : pr.getGroup() != null
+                        && groupMemberRepository.existsByGroupIdAndUserId(pr.getGroup().getId(), userId);
+            if (!hasAccess) {
+                throw new ResourceNotFoundException("PrayerRequest", "id", requestId);
             }
+
             // Se puede orar por pedidos nuevos (ACTIVE) o en espera (ON_HOLD),
             // nunca por uno ya respondido.
             if (pr.getStatus() == PrayerRequestStatus.ANSWERED) {
@@ -126,10 +143,13 @@ public class PrayerSessionSelectionService {
                 prayerRequestRepository.save(pr);
             }
 
-            activityService.record(pr.getGroup(), user,
-                    ActivityEventType.COMMITMENT_FULFILLED, selection.isPrivate(),
-                    Map.of("prayerRequestId", pr.getId(),
-                            "prayerTitle", pr.getTitle()));
+            // Los pedidos privados (sin grupo) no generan evento de muro.
+            if (pr.getGroup() != null) {
+                activityService.record(pr.getGroup(), user,
+                        ActivityEventType.COMMITMENT_FULFILLED, selection.isPrivate(),
+                        Map.of("prayerRequestId", pr.getId(),
+                                "prayerTitle", pr.getTitle()));
+            }
             fulfilled++;
         }
 

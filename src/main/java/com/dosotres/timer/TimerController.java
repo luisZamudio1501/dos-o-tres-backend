@@ -2,7 +2,6 @@ package com.dosotres.timer;
 
 import com.dosotres.prayer.PrayerSessionSelectionService;
 import com.dosotres.security.annotations.AuthUser;
-import com.dosotres.security.annotations.CurrentGroupId;
 import com.dosotres.timer.dto.SessionResponse;
 import com.dosotres.timer.dto.StartSessionRequest;
 import com.dosotres.timer.dto.SyncSessionRequest;
@@ -33,12 +32,12 @@ public class TimerController {
     @PostMapping("/start")
     @ResponseStatus(HttpStatus.CREATED)
     public SessionResponse start(@Valid @RequestBody StartSessionRequest req,
-                                  @CurrentGroupId Long groupId,
                                   @AuthUser Long userId) {
-        // groupId viene del header X-Group-Id, validado por GroupContextFilter.
-        SessionResponse response = timerService.start(req, groupId, userId);
+        // La sesión es del usuario (sin grupo fijo): el acceso a cada pedido
+        // seleccionado se valida por-pedido en attach (sesión unificada cross-group).
+        SessionResponse response = timerService.start(req, null, userId);
         if (req.prayerRequestIds() != null && !req.prayerRequestIds().isEmpty()) {
-            selectionService.attach(req.id(), req.prayerRequestIds(), groupId,
+            selectionService.attach(req.id(), req.prayerRequestIds(), userId,
                     Boolean.TRUE.equals(req.isPrivate()));
         }
         return response;

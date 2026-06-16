@@ -16,6 +16,7 @@ import com.dosotres.activity.ActivityService;
 import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.common.exception.ValidationException;
 import com.dosotres.group.Group;
+import com.dosotres.group.GroupMemberRepository;
 import com.dosotres.timer.PrayerSession;
 import com.dosotres.timer.port.PrayerSessionPort;
 import com.dosotres.user.User;
@@ -48,6 +49,8 @@ class PrayerSessionSelectionServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
+    private GroupMemberRepository groupMemberRepository;
+    @Mock
     private PrayerSessionPort sessionPort;
     @Mock
     private ActivityService activityService;
@@ -57,7 +60,7 @@ class PrayerSessionSelectionServiceTest {
     @BeforeEach
     void setUp() {
         service = new PrayerSessionSelectionService(sessionRequestRepository, prayerRequestRepository,
-                commitmentRepository, userRepository, sessionPort, activityService, FIXED_CLOCK);
+                commitmentRepository, userRepository, groupMemberRepository, sessionPort, activityService, FIXED_CLOCK);
     }
 
     private Group makeGroup(Long id) {
@@ -87,6 +90,7 @@ class PrayerSessionSelectionServiceTest {
         Group group = makeGroup(1L);
         when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(makeRequest(10L, group, PrayerRequestStatus.ACTIVE)));
         when(prayerRequestRepository.findById(20L)).thenReturn(Optional.of(makeRequest(20L, group, PrayerRequestStatus.ACTIVE)));
+        when(groupMemberRepository.existsByGroupIdAndUserId(1L, 1L)).thenReturn(true);
 
         service.attach("session-1", List.of(10L, 20L, 10L), 1L, false);
 
@@ -98,15 +102,46 @@ class PrayerSessionSelectionServiceTest {
         // ON_HOLD ahora es orable; solo ANSWERED se rechaza.
         Group group = makeGroup(1L);
         when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(makeRequest(10L, group, PrayerRequestStatus.ANSWERED)));
+        when(groupMemberRepository.existsByGroupIdAndUserId(1L, 1L)).thenReturn(true);
 
         assertThatThrownBy(() -> service.attach("session-1", List.of(10L), 1L, false))
                 .isInstanceOf(ValidationException.class);
     }
 
     @Test
-    void attach_rejectsRequestFromAnotherGroup() {
+    void attach_rejectsGroupRequestUserIsNotMemberOf() {
+        // No-fuga entre grupos: sin membresía, el pedido se reporta inexistente.
         Group otherGroup = makeGroup(99L);
         when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(makeRequest(10L, otherGroup, PrayerRequestStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> service.attach("session-1", List.of(10L), 1L, false))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void attach_allowsOwnPrivateRequest() {
+        PrayerRequest pr = new PrayerRequest();
+        pr.setId(10L);
+        pr.setAuthor(makeUser(1L));
+        pr.setTitle("Privado");
+        pr.setStatus(PrayerRequestStatus.ACTIVE);
+        pr.setVisibility(PrayerVisibility.PRIVATE);
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+
+        service.attach("session-1", List.of(10L), 1L, false);
+
+        verify(sessionRequestRepository).save(any(SessionPrayerRequest.class));
+    }
+
+    @Test
+    void attach_rejectsPrivateRequestOfAnotherUser() {
+        PrayerRequest pr = new PrayerRequest();
+        pr.setId(10L);
+        pr.setAuthor(makeUser(2L));
+        pr.setTitle("Privado ajeno");
+        pr.setStatus(PrayerRequestStatus.ACTIVE);
+        pr.setVisibility(PrayerVisibility.PRIVATE);
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
 
         assertThatThrownBy(() -> service.attach("session-1", List.of(10L), 1L, false))
                 .isInstanceOf(ResourceNotFoundException.class);

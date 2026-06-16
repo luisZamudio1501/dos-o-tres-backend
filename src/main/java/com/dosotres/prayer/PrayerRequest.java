@@ -26,12 +26,16 @@ public class PrayerRequest {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "group_id", nullable = false)
+    @JoinColumn(name = "group_id")
     private Group group;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "author_id", nullable = false)
     private User author;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private PrayerVisibility visibility = PrayerVisibility.GROUP;
 
     @Column(nullable = false, length = 200)
     private String title;
@@ -113,6 +117,14 @@ public class PrayerRequest {
 
     public void setStatus(PrayerRequestStatus status) {
         this.status = status;
+    }
+
+    public PrayerVisibility getVisibility() {
+        return visibility;
+    }
+
+    public void setVisibility(PrayerVisibility visibility) {
+        this.visibility = visibility;
     }
 
     public Instant getAnsweredAt() {

@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,6 +83,118 @@ public class PrayerRequestService {
                 Map.of("prayerRequestId", pr.getId(), "prayerTitle", pr.getTitle()));
 
         return toResponse(pr, 0, 0); // recién creado: nadie oró todavía
+    }
+
+    /**
+     * Crea un pedido en el espacio personal del usuario: PRIVATE, sin grupo y
+     * sin evento de muro (todavía no es visible para nadie más que el autor).
+     */
+    public PrayerRequestResponse createPersonal(CreatePrayerRequest req, Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        PrayerRequest pr = new PrayerRequest();
+        pr.setAuthor(user);
+        pr.setTitle(req.title());
+        pr.setDescription(req.description());
+        pr.setStatus(PrayerRequestStatus.ACTIVE);
+        pr.setVisibility(PrayerVisibility.PRIVATE);
+        prayerRequestRepository.save(pr);
+
+        return toResponse(pr, 0, 0);
+    }
+
+    /** Pedidos privados del usuario (su espacio personal). */
+    @Transactional(readOnly = true)
+    public Page<PrayerRequestResponse> listMine(Long userId, Pageable pageable) {
+        Page<PrayerRequest> page = prayerRequestRepository
+                .findByAuthorIdAndVisibility(userId, PrayerVisibility.PRIVATE, pageable);
+
+        List<Long> ids = page.getContent().stream().map(PrayerRequest::getId).toList();
+        Map<Long, Long> counts = new HashMap<>();
+        Map<Long, Long> prayedCounts = new HashMap<>();
+        if (!ids.isEmpty()) {
+            for (Object[] row : commitmentRepository.countGroupedByPrayerRequestIds(ids)) {
+                counts.put((Long) row[0], (Long) row[1]);
+            }
+            for (Object[] row : commitmentRepository.countDistinctUsersGroupedByPrayerRequestIds(ids)) {
+                prayedCounts.put((Long) row[0], (Long) row[1]);
+            }
+        }
+        return page.map(pr -> toResponse(pr,
+                counts.getOrDefault(pr.getId(), 0L).intValue(),
+                prayedCounts.getOrDefault(pr.getId(), 0L).intValue()));
+    }
+
+    /**
+     * Comparte un pedido privado con un grupo (one-way). Solo el autor, sobre un
+     * pedido aún PRIVATE, y solo a un grupo del que sea miembro. Recién al
+     * compartir se registra el evento de creación en el muro de ese grupo.
+     */
+    public PrayerRequestResponse share(Long id, Long userId, Long groupId) {
+        PrayerRequest pr = prayerRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("PrayerRequest", "id", id));
+
+        if (!pr.getAuthor().getId().equals(userId)) {
+            throw new ForbiddenException("Only the owner can share this prayer request");
+        }
+        if (pr.getVisibility() != PrayerVisibility.PRIVATE) {
+            throw new ValidationException("El pedido ya está compartido con un grupo");
+        }
+        if (!groupMemberRepository.existsByGroupIdAndUserId(groupId, userId)) {
+            throw new ForbiddenException("No sos miembro de ese grupo");
+        }
+
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Group", "id", groupId));
+        pr.setGroup(group);
+        pr.setVisibility(PrayerVisibility.GROUP);
+        prayerRequestRepository.save(pr);
+
+        activityService.record(group, pr.getAuthor(), ActivityEventType.REQUEST_CREATED, false,
+                Map.of("prayerRequestId", pr.getId(), "prayerTitle", pr.getTitle()));
+
+        return buildResponse(pr);
+    }
+
+    /**
+     * Pedidos orables del usuario para una sesión unificada: siempre sus pedidos
+     * privados; si includeGroups, además los pedidos orables (ACTIVE/ON_HOLD) de
+     * todos sus grupos. Permite juntar varios grupos + lo personal en un momento.
+     */
+    @Transactional(readOnly = true)
+    public List<PrayerRequestResponse> prayable(Long userId, boolean includeGroups) {
+        List<PrayerRequest> result = new ArrayList<>(
+                prayerRequestRepository.findByAuthorIdAndVisibilityAndStatusNot(
+                        userId, PrayerVisibility.PRIVATE, PrayerRequestStatus.ANSWERED));
+
+        if (includeGroups) {
+            List<Long> groupIds = groupMemberRepository.findByUserId(userId).stream()
+                    .map(m -> m.getGroup().getId())
+                    .toList();
+            if (!groupIds.isEmpty()) {
+                result.addAll(prayerRequestRepository.findByGroupIdInAndStatusIn(
+                        groupIds,
+                        List.of(PrayerRequestStatus.ACTIVE, PrayerRequestStatus.ON_HOLD)));
+            }
+        }
+
+        List<Long> ids = result.stream().map(PrayerRequest::getId).toList();
+        Map<Long, Long> counts = new HashMap<>();
+        Map<Long, Long> prayedCounts = new HashMap<>();
+        if (!ids.isEmpty()) {
+            for (Object[] row : commitmentRepository.countGroupedByPrayerRequestIds(ids)) {
+                counts.put((Long) row[0], (Long) row[1]);
+            }
+            for (Object[] row : commitmentRepository.countDistinctUsersGroupedByPrayerRequestIds(ids)) {
+                prayedCounts.put((Long) row[0], (Long) row[1]);
+            }
+        }
+        return result.stream()
+                .map(pr -> toResponse(pr,
+                        counts.getOrDefault(pr.getId(), 0L).intValue(),
+                        prayedCounts.getOrDefault(pr.getId(), 0L).intValue()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -307,7 +420,10 @@ public class PrayerRequestService {
                 pr.getTestimony(),
                 pr.getCreatedAt() != null ? pr.getCreatedAt().toString() : null,
                 commitmentCount,
-                prayedByCount
+                prayedByCount,
+                pr.getVisibility().name(),
+                pr.getGroup() != null ? pr.getGroup().getId() : null,
+                pr.getGroup() != null ? pr.getGroup().getName() : null
         );
     }
 }

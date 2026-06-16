@@ -11,5 +11,8 @@ public record PrayerRequestResponse(
         String testimony,
         String createdAt,
         int commitmentCount,
-        int prayedByCount
+        int prayedByCount,
+        String visibility,
+        Long groupId,
+        String groupName
 ) {}
