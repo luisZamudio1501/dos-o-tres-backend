@@ -56,9 +56,10 @@ public class PrayerCommitmentService {
             throw new ResourceNotFoundException("PrayerRequest", "id+groupId", req.prayerRequestId() + "+" + groupId);
         }
 
-        // Fix 3.7: misma regla que la selección en cronómetro — solo pedidos activos.
-        if (prayerRequest.getStatus() != PrayerRequestStatus.ACTIVE) {
-            throw new ValidationException("Solo se pueden asumir compromisos sobre pedidos activos");
+        // Se puede asumir un compromiso sobre pedidos nuevos (ACTIVE) o en espera
+        // (ON_HOLD), nunca sobre uno ya respondido.
+        if (prayerRequest.getStatus() == PrayerRequestStatus.ANSWERED) {
+            throw new ValidationException("No se puede asumir un compromiso sobre un pedido ya respondido");
         }
 
         // Fix 3.6: fecha malformada era 500; ahora 400 con mensaje claro.

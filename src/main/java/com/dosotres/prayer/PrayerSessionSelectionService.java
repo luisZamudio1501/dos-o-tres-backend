@@ -66,8 +66,10 @@ public class PrayerSessionSelectionService {
             if (!pr.getGroup().getId().equals(groupId)) {
                 throw new ResourceNotFoundException("PrayerRequest", "id+groupId", requestId + "+" + groupId);
             }
-            if (pr.getStatus() != PrayerRequestStatus.ACTIVE) {
-                throw new ValidationException("Solo se pueden seleccionar pedidos activos");
+            // Se puede orar por pedidos nuevos (ACTIVE) o en espera (ON_HOLD),
+            // nunca por uno ya respondido.
+            if (pr.getStatus() == PrayerRequestStatus.ANSWERED) {
+                throw new ValidationException("No se puede orar por un pedido ya respondido");
             }
             SessionPrayerRequest link = new SessionPrayerRequest();
             link.setSessionId(sessionId);
@@ -117,6 +119,12 @@ public class PrayerSessionSelectionService {
             commitment.setPrivate(selection.isPrivate());
             commitment.setSession(session);
             commitmentRepository.save(commitment);
+
+            // Primer cumplimiento sobre un pedido nuevo → pasa a "en espera".
+            if (pr.getStatus() == PrayerRequestStatus.ACTIVE) {
+                pr.setStatus(PrayerRequestStatus.ON_HOLD);
+                prayerRequestRepository.save(pr);
+            }
 
             activityService.record(pr.getGroup(), user,
                     ActivityEventType.COMMITMENT_FULFILLED, selection.isPrivate(),

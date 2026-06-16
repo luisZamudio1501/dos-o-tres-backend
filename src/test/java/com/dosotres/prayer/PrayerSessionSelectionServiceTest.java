@@ -94,9 +94,10 @@ class PrayerSessionSelectionServiceTest {
     }
 
     @Test
-    void attach_rejectsNonActiveRequest() {
+    void attach_rejectsAnsweredRequest() {
+        // ON_HOLD ahora es orable; solo ANSWERED se rechaza.
         Group group = makeGroup(1L);
-        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(makeRequest(10L, group, PrayerRequestStatus.ON_HOLD)));
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(makeRequest(10L, group, PrayerRequestStatus.ANSWERED)));
 
         assertThatThrownBy(() -> service.attach("session-1", List.of(10L), 1L, false))
                 .isInstanceOf(ValidationException.class);

@@ -10,5 +10,6 @@ public record PrayerRequestResponse(
         String answeredAt,
         String testimony,
         String createdAt,
-        int commitmentCount
+        int commitmentCount,
+        int prayedByCount
 ) {}

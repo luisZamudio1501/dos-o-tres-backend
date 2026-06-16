@@ -19,10 +19,7 @@ import com.dosotres.group.dto.CreateGroupRequest;
 import com.dosotres.group.dto.GroupMemberResponse;
 import com.dosotres.group.dto.GroupResponse;
 import com.dosotres.prayer.PrayerCommitment;
-import com.dosotres.prayer.PrayerRequest;
 import com.dosotres.prayer.PrayerCommitmentRepository;
-import com.dosotres.prayer.PrayerRequestRepository;
-import com.dosotres.prayer.PrayerRequestStatus;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.time.Instant;
@@ -45,8 +42,6 @@ class GroupServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
-    private PrayerRequestRepository prayerRequestRepository;
-    @Mock
     private PrayerCommitmentRepository prayerCommitmentRepository;
     @Mock
     private ActivityService activityService;
@@ -56,7 +51,7 @@ class GroupServiceTest {
     @BeforeEach
     void setUp() {
         groupService = new GroupService(groupRepository, groupMemberRepository, userRepository,
-                prayerRequestRepository, prayerCommitmentRepository, activityService);
+                prayerCommitmentRepository, activityService);
     }
 
     private User makeUser(Long id, String name) {
@@ -205,7 +200,7 @@ class GroupServiceTest {
     }
 
     @Test
-    void removeMember_deletesPendingCommitmentsAndHoldsRequests() {
+    void removeMember_deletesPendingCommitments_keepsRequestStatus() {
         User admin = makeUser(1L, "Luis");
         User target = makeUser(2L, "Ana");
         Group group = makeGroup(10L, "Prayer Group");
@@ -213,20 +208,16 @@ class GroupServiceTest {
         GroupMember targetMember = makeMember(group, target, GroupRole.MEMBER);
 
         PrayerCommitment pending = new PrayerCommitment();
-        PrayerRequest activeRequest = new PrayerRequest();
-        activeRequest.setStatus(PrayerRequestStatus.ACTIVE);
 
         when(groupMemberRepository.findByGroupIdAndUserId(10L, 1L)).thenReturn(Optional.of(adminMember));
         when(groupMemberRepository.findByGroupIdAndUserId(10L, 2L)).thenReturn(Optional.of(targetMember));
         when(prayerCommitmentRepository.findByUserIdAndPrayerRequestGroupIdAndFulfilledFalse(2L, 10L))
                 .thenReturn(List.of(pending));
-        when(prayerRequestRepository.findByAuthorIdAndGroupIdAndStatus(2L, 10L, PrayerRequestStatus.ACTIVE))
-                .thenReturn(List.of(activeRequest));
 
         groupService.removeMember(10L, 2L, 1L);
 
+        // D4 ya no fuerza el estado de los pedidos: solo borra compromisos pendientes.
         verify(prayerCommitmentRepository).deleteAll(List.of(pending));
-        assertThat(activeRequest.getStatus()).isEqualTo(PrayerRequestStatus.ON_HOLD);
         verify(groupMemberRepository).delete(targetMember);
     }
 

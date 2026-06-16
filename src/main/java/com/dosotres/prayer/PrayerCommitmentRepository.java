@@ -18,6 +18,20 @@ public interface PrayerCommitmentRepository extends JpaRepository<PrayerCommitme
             + "where c.prayerRequest.id in :requestIds group by c.prayerRequest.id")
     List<Object[]> countGroupedByPrayerRequestIds(@Param("requestIds") List<Long> requestIds);
 
+    /** Personas distintas que efectivamente oraron por un pedido. */
+    @Query("select count(distinct c.user.id) from PrayerCommitment c "
+            + "where c.prayerRequest.id = :requestId and c.fulfilled = true")
+    long countDistinctUsersByPrayerRequestId(@Param("requestId") Long requestId);
+
+    /** Personas distintas que oraron, agregado por pedido — evita N+1 en la lista. */
+    @Query("select c.prayerRequest.id, count(distinct c.user.id) from PrayerCommitment c "
+            + "where c.prayerRequest.id in :requestIds and c.fulfilled = true "
+            + "group by c.prayerRequest.id")
+    List<Object[]> countDistinctUsersGroupedByPrayerRequestIds(@Param("requestIds") List<Long> requestIds);
+
+    /** Historial "quién oró": solo cumplimientos reales, más reciente primero. */
+    List<PrayerCommitment> findByPrayerRequestIdAndFulfilledTrueOrderByFulfilledAtDesc(Long requestId);
+
     List<PrayerCommitment> findByUserIdAndCommittedDate(Long userId, LocalDate date);
 
     List<PrayerCommitment> findByPrayerRequestId(Long requestId);

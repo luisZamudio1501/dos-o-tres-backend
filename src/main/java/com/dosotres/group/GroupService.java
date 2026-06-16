@@ -11,10 +11,7 @@ import com.dosotres.group.dto.GroupMemberResponse;
 import com.dosotres.group.dto.GroupResponse;
 import com.dosotres.group.dto.UpdateGroupRequest;
 import com.dosotres.prayer.PrayerCommitment;
-import com.dosotres.prayer.PrayerRequest;
-import com.dosotres.prayer.PrayerRequestRepository;
 import com.dosotres.prayer.PrayerCommitmentRepository;
-import com.dosotres.prayer.PrayerRequestStatus;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.util.List;
@@ -30,20 +27,17 @@ public class GroupService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final UserRepository userRepository;
-    private final PrayerRequestRepository prayerRequestRepository;
     private final PrayerCommitmentRepository prayerCommitmentRepository;
     private final ActivityService activityService;
 
     public GroupService(GroupRepository groupRepository,
                         GroupMemberRepository groupMemberRepository,
                         UserRepository userRepository,
-                        PrayerRequestRepository prayerRequestRepository,
                         PrayerCommitmentRepository prayerCommitmentRepository,
                         ActivityService activityService) {
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.userRepository = userRepository;
-        this.prayerRequestRepository = prayerRequestRepository;
         this.prayerCommitmentRepository = prayerCommitmentRepository;
         this.activityService = activityService;
     }
@@ -121,8 +115,9 @@ public class GroupService {
     }
 
     /**
-     * Expulsión de miembro (regla D4): hard delete de compromisos no cumplidos,
-     * soft delete de sus pedidos (pasan a ON_HOLD), historial de cumplimientos intacto.
+     * Expulsión de miembro (regla D4): hard delete de sus compromisos no cumplidos.
+     * Los pedidos del miembro quedan en el estado que tengan (la oración rige el
+     * estado, no la expulsión); el historial de cumplimientos queda intacto.
      */
     public void removeMember(Long groupId, Long targetUserId, Long actingUserId) {
         requireAdmin(groupId, actingUserId);
@@ -167,13 +162,6 @@ public class GroupService {
         List<PrayerCommitment> pendingCommitments = prayerCommitmentRepository
                 .findByUserIdAndPrayerRequestGroupIdAndFulfilledFalse(userId, groupId);
         prayerCommitmentRepository.deleteAll(pendingCommitments);
-
-        List<PrayerRequest> activeRequests = prayerRequestRepository
-                .findByAuthorIdAndGroupIdAndStatus(userId, groupId, PrayerRequestStatus.ACTIVE);
-        for (PrayerRequest pr : activeRequests) {
-            pr.setStatus(PrayerRequestStatus.ON_HOLD);
-        }
-        prayerRequestRepository.saveAll(activeRequests);
     }
 
     /** Personalización del grupo (nombre/color/emoji). Solo admin. */

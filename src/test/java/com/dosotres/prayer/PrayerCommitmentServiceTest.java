@@ -129,7 +129,7 @@ class PrayerCommitmentServiceTest {
         assertThatThrownBy(() -> service.create(
                 new CreateCommitmentRequest(10L, "2026-05-27"), 1L, 1L))
                 .isInstanceOf(ValidationException.class)
-                .hasMessageContaining("pedidos activos");
+                .hasMessageContaining("respondido");
     }
 
     @Test

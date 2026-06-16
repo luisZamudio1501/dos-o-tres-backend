@@ -2,10 +2,13 @@ package com.dosotres.prayer;
 
 import com.dosotres.prayer.dto.ChangeStatusRequest;
 import com.dosotres.prayer.dto.CreatePrayerRequest;
+import com.dosotres.prayer.dto.PrayRequest;
+import com.dosotres.prayer.dto.PrayerLogResponse;
 import com.dosotres.prayer.dto.PrayerRequestResponse;
 import com.dosotres.security.annotations.AuthUser;
 import com.dosotres.security.annotations.CurrentGroupId;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -51,6 +54,21 @@ public class PrayerRequestController {
     public PrayerRequestResponse getById(@PathVariable Long id,
                                           @CurrentGroupId Long groupId) {
         return prayerRequestService.getById(id, groupId);
+    }
+
+    @GetMapping("/{id}/prayers")
+    public List<PrayerLogResponse> listPrayers(@PathVariable Long id,
+                                               @CurrentGroupId Long groupId) {
+        return prayerRequestService.listPrayers(id, groupId);
+    }
+
+    @PostMapping("/{id}/pray")
+    public PrayerRequestResponse pray(@PathVariable Long id,
+                                      @RequestBody(required = false) PrayRequest req,
+                                      @CurrentGroupId Long groupId,
+                                      @AuthUser Long userId) {
+        boolean isPrivate = req != null && req.isPrivate();
+        return prayerRequestService.pray(id, groupId, userId, isPrivate);
     }
 
     @PatchMapping("/{id}/answer")
