@@ -32,6 +32,11 @@ public interface PrayerCommitmentRepository extends JpaRepository<PrayerCommitme
     /** Historial "quién oró": solo cumplimientos reales, más reciente primero. */
     List<PrayerCommitment> findByPrayerRequestIdAndFulfilledTrueOrderByFulfilledAtDesc(Long requestId);
 
+    /** Ids de los usuarios que efectivamente oraron por un pedido (para notificar). */
+    @Query("select distinct c.user.id from PrayerCommitment c "
+            + "where c.prayerRequest.id = :requestId and c.fulfilled = true")
+    List<Long> findDistinctUserIdsByPrayerRequestIdAndFulfilledTrue(@Param("requestId") Long requestId);
+
     List<PrayerCommitment> findByUserIdAndCommittedDate(Long userId, LocalDate date);
 
     List<PrayerCommitment> findByPrayerRequestId(Long requestId);

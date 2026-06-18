@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -45,6 +46,7 @@ public class PrayerRequestService {
     private final PrayerCommitmentRepository commitmentRepository;
     private final SessionPrayerRequestRepository sessionPrayerRequestRepository;
     private final ActivityService activityService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public PrayerRequestService(PrayerRequestRepository prayerRequestRepository,
@@ -54,6 +56,7 @@ public class PrayerRequestService {
                                  PrayerCommitmentRepository commitmentRepository,
                                  SessionPrayerRequestRepository sessionPrayerRequestRepository,
                                  ActivityService activityService,
+                                 ApplicationEventPublisher eventPublisher,
                                  Clock clock) {
         this.prayerRequestRepository = prayerRequestRepository;
         this.groupRepository = groupRepository;
@@ -62,6 +65,7 @@ public class PrayerRequestService {
         this.commitmentRepository = commitmentRepository;
         this.sessionPrayerRequestRepository = sessionPrayerRequestRepository;
         this.activityService = activityService;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -332,6 +336,11 @@ public class PrayerRequestService {
                     Map.of("prayerRequestId", pr.getId(),
                             "prayerTitle", pr.getTitle(),
                             "hasTestimony", hasTestimony));
+
+            // Push asíncrono (tras commit) a quienes oraron por el pedido.
+            eventPublisher.publishEvent(new PrayerAnsweredEvent(
+                    pr.getId(), pr.getTitle(), pr.getAuthor().getId(),
+                    pr.getGroup() != null ? pr.getGroup().getId() : null));
             return buildResponse(pr);
         }
 

@@ -13,3 +13,5 @@ spring:
 app:
   timer:
     cleanup-enabled: false
+  goal:
+    reminders-enabled: false

@@ -23,6 +23,7 @@ import com.dosotres.group.GroupRole;
 import com.dosotres.prayer.dto.CreatePrayerRequest;
 import com.dosotres.prayer.dto.PrayerLogResponse;
 import com.dosotres.prayer.dto.PrayerRequestResponse;
+import org.springframework.context.ApplicationEventPublisher;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.time.Clock;
@@ -58,6 +59,8 @@ class PrayerRequestServiceTest {
     private SessionPrayerRequestRepository sessionPrayerRequestRepository;
     @Mock
     private ActivityService activityService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private final Clock fixedClock = Clock.fixed(Instant.parse("2026-05-26T12:00:00Z"), ZoneId.of("UTC"));
 
@@ -66,7 +69,8 @@ class PrayerRequestServiceTest {
     @BeforeEach
     void setUp() {
         service = new PrayerRequestService(prayerRequestRepository, groupRepository, groupMemberRepository,
-                userRepository, commitmentRepository, sessionPrayerRequestRepository, activityService, fixedClock);
+                userRepository, commitmentRepository, sessionPrayerRequestRepository, activityService,
+                eventPublisher, fixedClock);
     }
 
     private Group makeGroup(Long id) {
@@ -162,6 +166,7 @@ class PrayerRequestServiceTest {
 
         assertThat(response.status()).isEqualTo("ANSWERED");
         assertThat(response.answeredAt()).isNotNull();
+        verify(eventPublisher).publishEvent(any(PrayerAnsweredEvent.class));
     }
 
     @Test

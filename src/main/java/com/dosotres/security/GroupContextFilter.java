@@ -40,6 +40,8 @@ public class GroupContextFilter extends OncePerRequestFilter {
                 new AntPathRequestMatcher("/api/users/me"),
                 // Espacio personal: opera sobre el usuario, sin contexto de grupo.
                 new AntPathRequestMatcher("/api/me/**"),
+                // Suscripciones push: son del usuario, no dependen de ningún grupo.
+                new AntPathRequestMatcher("/api/push/**"),
                 // Cronómetro: la sesión es del usuario; el acceso a cada pedido
                 // se valida por-pedido en attach (sesión unificada cross-group).
                 new AntPathRequestMatcher("/api/timer/**"),

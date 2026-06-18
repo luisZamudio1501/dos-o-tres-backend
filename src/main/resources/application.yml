@@ -20,3 +20,10 @@ app:
   timer:
     abandon-threshold-minutes: 30
     cleanup-cron: "0 */15 * * * *"
+  goal:
+    reminder-cron: "0 */5 * * * *"
+  push:
+    vapid:
+      public-key: ${VAPID_PUBLIC_KEY:}
+      private-key: ${VAPID_PRIVATE_KEY:}
+      subject: ${VAPID_SUBJECT:mailto:soporte@mateo1819.org}
