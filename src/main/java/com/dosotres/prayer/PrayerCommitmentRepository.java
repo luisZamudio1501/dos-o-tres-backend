@@ -1,5 +1,7 @@
 package com.dosotres.prayer;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -47,4 +49,22 @@ public interface PrayerCommitmentRepository extends JpaRepository<PrayerCommitme
     List<PrayerCommitment> findByUserIdAndPrayerRequestGroupIdAndFulfilledFalse(Long userId, Long groupId);
 
     void deleteByPrayerRequestId(Long requestId);
+
+    /**
+     * Cuántas veces oró el usuario actual por cada pedido + última vez, agregado
+     * por pedido — evita N+1 al pintar listados (F.2).
+     */
+    @Query("select c.prayerRequest.id, count(c), max(c.fulfilledAt) from PrayerCommitment c "
+            + "where c.user.id = :userId and c.prayerRequest.id in :requestIds and c.fulfilled = true "
+            + "group by c.prayerRequest.id")
+    List<Object[]> findMyPrayerStatsGroupedByPrayerRequestIds(
+            @Param("userId") Long userId, @Param("requestIds") List<Long> requestIds);
+
+    /** Agenda de oración del usuario: todo pedido por el que oró, más reciente primero. */
+    @Query(value = "select c.prayerRequest as request, count(c) as cnt, max(c.fulfilledAt) as lastPrayedAt "
+            + "from PrayerCommitment c where c.user.id = :userId and c.fulfilled = true "
+            + "group by c.prayerRequest order by max(c.fulfilledAt) desc",
+            countQuery = "select count(distinct c.prayerRequest) from PrayerCommitment c "
+                    + "where c.user.id = :userId and c.fulfilled = true")
+    Page<PrayerHistoryRow> findPrayerHistoryByUserId(@Param("userId") Long userId, Pageable pageable);
 }

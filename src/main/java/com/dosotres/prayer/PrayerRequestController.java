@@ -46,14 +46,16 @@ public class PrayerRequestController {
     @GetMapping
     public Page<PrayerRequestResponse> list(@CurrentGroupId Long groupId,
                                              @RequestParam(required = false) PrayerRequestStatus status,
-                                             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return prayerRequestService.listByGroup(groupId, status, pageable);
+                                             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+                                             @AuthUser Long userId) {
+        return prayerRequestService.listByGroup(groupId, status, pageable, userId);
     }
 
     @GetMapping("/{id}")
     public PrayerRequestResponse getById(@PathVariable Long id,
-                                          @CurrentGroupId Long groupId) {
-        return prayerRequestService.getById(id, groupId);
+                                          @CurrentGroupId Long groupId,
+                                          @AuthUser Long userId) {
+        return prayerRequestService.getById(id, groupId, userId);
     }
 
     @GetMapping("/{id}/prayers")

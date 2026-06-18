@@ -14,5 +14,7 @@ public record PrayerRequestResponse(
         int prayedByCount,
         String visibility,
         Long groupId,
-        String groupName
+        String groupName,
+        int myPrayerCount,
+        String myLastPrayedAt
 ) {}

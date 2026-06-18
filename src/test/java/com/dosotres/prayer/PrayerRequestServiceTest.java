@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -130,7 +131,7 @@ class PrayerRequestServiceTest {
         when(prayerRequestRepository.findByGroupIdAndStatus(eq(1L), eq(PrayerRequestStatus.ACTIVE), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(pr), pageable, 1));
 
-        Page<PrayerRequestResponse> result = service.listByGroup(1L, PrayerRequestStatus.ACTIVE, pageable);
+        Page<PrayerRequestResponse> result = service.listByGroup(1L, PrayerRequestStatus.ACTIVE, pageable, 1L);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).status()).isEqualTo("ACTIVE");
@@ -147,7 +148,7 @@ class PrayerRequestServiceTest {
         when(prayerRequestRepository.findByGroupId(eq(1L), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(pr1, pr2), pageable, 2));
 
-        Page<PrayerRequestResponse> result = service.listByGroup(1L, null, pageable);
+        Page<PrayerRequestResponse> result = service.listByGroup(1L, null, pageable, 1L);
 
         assertThat(result.getContent()).hasSize(2);
     }
@@ -421,5 +422,58 @@ class PrayerRequestServiceTest {
         assertThat(log.get(0).displayName()).isEqualTo("Ana");
         assertThat(log.get(1).displayName()).isEqualTo("Alguien");
         assertThat(log.get(1).isPrivate()).isTrue();
+    }
+
+    @Test
+    void getById_includesMyPrayerCountAndLastPrayedAt() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ON_HOLD);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+        when(commitmentRepository.findMyPrayerStatsGroupedByPrayerRequestIds(eq(2L), eq(List.of(10L))))
+                .thenReturn(List.<Object[]>of(new Object[]{10L, 3L, Instant.parse("2026-05-26T09:00:00Z")}));
+
+        PrayerRequestResponse response = service.getById(10L, 1L, 2L);
+
+        assertThat(response.myPrayerCount()).isEqualTo(3);
+        assertThat(response.myLastPrayedAt()).isEqualTo("2026-05-26T09:00:00Z");
+    }
+
+    @Test
+    void getById_withoutPriorPrayer_myPrayerCountIsZero() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+
+        PrayerRequestResponse response = service.getById(10L, 1L, 2L);
+
+        assertThat(response.myPrayerCount()).isEqualTo(0);
+        assertThat(response.myLastPrayedAt()).isNull();
+    }
+
+    @Test
+    void prayerHistory_returnsRequestsOrderedByLastPrayed() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ON_HOLD);
+
+        PrayerHistoryRow row = mock(PrayerHistoryRow.class);
+        when(row.getRequest()).thenReturn(pr);
+        when(row.getCnt()).thenReturn(3L);
+        when(row.getLastPrayedAt()).thenReturn(Instant.parse("2026-05-26T09:00:00Z"));
+
+        Pageable pageable = PageRequest.of(0, 10);
+        when(commitmentRepository.findPrayerHistoryByUserId(eq(2L), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(row), pageable, 1));
+
+        Page<PrayerRequestResponse> history = service.prayerHistory(2L, pageable);
+
+        assertThat(history.getContent()).hasSize(1);
+        assertThat(history.getContent().get(0).id()).isEqualTo(10L);
+        assertThat(history.getContent().get(0).myPrayerCount()).isEqualTo(3);
+        assertThat(history.getContent().get(0).myLastPrayedAt()).isEqualTo("2026-05-26T09:00:00Z");
     }
 }

@@ -69,6 +69,29 @@ public class PrayerRequestService {
         this.clock = clock;
     }
 
+    /** Agenda de oración del usuario: todo pedido por el que oró, más reciente primero. */
+    @Transactional(readOnly = true)
+    public Page<PrayerRequestResponse> prayerHistory(Long userId, Pageable pageable) {
+        Page<PrayerHistoryRow> rows = commitmentRepository.findPrayerHistoryByUserId(userId, pageable);
+
+        List<Long> ids = rows.getContent().stream().map(r -> r.getRequest().getId()).toList();
+        Map<Long, Long> counts = new HashMap<>();
+        Map<Long, Long> prayedCounts = new HashMap<>();
+        if (!ids.isEmpty()) {
+            for (Object[] row : commitmentRepository.countGroupedByPrayerRequestIds(ids)) {
+                counts.put((Long) row[0], (Long) row[1]);
+            }
+            for (Object[] row : commitmentRepository.countDistinctUsersGroupedByPrayerRequestIds(ids)) {
+                prayedCounts.put((Long) row[0], (Long) row[1]);
+            }
+        }
+        return rows.map(row -> toResponse(row.getRequest(),
+                counts.getOrDefault(row.getRequest().getId(), 0L).intValue(),
+                prayedCounts.getOrDefault(row.getRequest().getId(), 0L).intValue(),
+                row.getCnt().intValue(),
+                row.getLastPrayedAt() != null ? row.getLastPrayedAt().toString() : null));
+    }
+
     public PrayerRequestResponse create(CreatePrayerRequest req, Long groupId, Long userId) {
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Group", "id", groupId));
@@ -125,9 +148,11 @@ public class PrayerRequestService {
                 prayedCounts.put((Long) row[0], (Long) row[1]);
             }
         }
+        Map<Long, Object[]> myStats = myStatsFor(userId, ids);
         return page.map(pr -> toResponse(pr,
                 counts.getOrDefault(pr.getId(), 0L).intValue(),
-                prayedCounts.getOrDefault(pr.getId(), 0L).intValue()));
+                prayedCounts.getOrDefault(pr.getId(), 0L).intValue(),
+                myStats, pr.getId()));
     }
 
     /**
@@ -158,7 +183,7 @@ public class PrayerRequestService {
         activityService.record(group, pr.getAuthor(), ActivityEventType.REQUEST_CREATED, false,
                 Map.of("prayerRequestId", pr.getId(), "prayerTitle", pr.getTitle()));
 
-        return buildResponse(pr);
+        return buildResponse(pr, userId);
     }
 
     /**
@@ -194,15 +219,18 @@ public class PrayerRequestService {
                 prayedCounts.put((Long) row[0], (Long) row[1]);
             }
         }
+        Map<Long, Object[]> myStats = myStatsFor(userId, ids);
         return result.stream()
                 .map(pr -> toResponse(pr,
                         counts.getOrDefault(pr.getId(), 0L).intValue(),
-                        prayedCounts.getOrDefault(pr.getId(), 0L).intValue()))
+                        prayedCounts.getOrDefault(pr.getId(), 0L).intValue(),
+                        myStats, pr.getId()))
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public Page<PrayerRequestResponse> listByGroup(Long groupId, PrayerRequestStatus status, Pageable pageable) {
+    public Page<PrayerRequestResponse> listByGroup(Long groupId, PrayerRequestStatus status, Pageable pageable,
+                                                    Long userId) {
         Page<PrayerRequest> page;
         if (status != null) {
             page = prayerRequestRepository.findByGroupIdAndStatus(groupId, status, pageable);
@@ -222,15 +250,17 @@ public class PrayerRequestService {
                 prayedCounts.put((Long) row[0], (Long) row[1]);
             }
         }
+        Map<Long, Object[]> myStats = myStatsFor(userId, ids);
         return page.map(pr -> toResponse(pr,
                 counts.getOrDefault(pr.getId(), 0L).intValue(),
-                prayedCounts.getOrDefault(pr.getId(), 0L).intValue()));
+                prayedCounts.getOrDefault(pr.getId(), 0L).intValue(),
+                myStats, pr.getId()));
     }
 
     @Transactional(readOnly = true)
-    public PrayerRequestResponse getById(Long id, Long groupId) {
+    public PrayerRequestResponse getById(Long id, Long groupId, Long userId) {
         PrayerRequest pr = findInGroup(id, groupId);
-        return buildResponse(pr);
+        return buildResponse(pr, userId);
     }
 
     /** Historial "quién oró" por un pedido. Enmascara como "Alguien" las oraciones privadas. */
@@ -292,7 +322,7 @@ public class PrayerRequestService {
             prayerRequestRepository.save(pr);
         }
 
-        return buildResponse(pr);
+        return buildResponse(pr, userId);
     }
 
     public PrayerRequestResponse markAsAnswered(Long id, Long groupId, Long userId) {
@@ -341,7 +371,7 @@ public class PrayerRequestService {
             eventPublisher.publishEvent(new PrayerAnsweredEvent(
                     pr.getId(), pr.getTitle(), pr.getAuthor().getId(),
                     pr.getGroup() != null ? pr.getGroup().getId() : null));
-            return buildResponse(pr);
+            return buildResponse(pr, userId);
         }
 
         // Cualquier otro estado solo es válido como "reactivar" un pedido respondido.
@@ -368,7 +398,7 @@ public class PrayerRequestService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
         activityService.record(pr.getGroup(), actor, ActivityEventType.REQUEST_REACTIVATED, false,
                 Map.of("prayerRequestId", pr.getId(), "prayerTitle", pr.getTitle()));
-        return buildResponse(pr);
+        return buildResponse(pr, userId);
     }
 
     /**
@@ -411,13 +441,40 @@ public class PrayerRequestService {
         }
     }
 
-    private PrayerRequestResponse buildResponse(PrayerRequest pr) {
+    private PrayerRequestResponse buildResponse(PrayerRequest pr, Long userId) {
+        Map<Long, Object[]> myStats = myStatsFor(userId, List.of(pr.getId()));
         return toResponse(pr,
                 (int) commitmentRepository.countByPrayerRequestId(pr.getId()),
-                (int) commitmentRepository.countDistinctUsersByPrayerRequestId(pr.getId()));
+                (int) commitmentRepository.countDistinctUsersByPrayerRequestId(pr.getId()),
+                myStats, pr.getId());
+    }
+
+    /** Cuántas veces oró el usuario actual por cada pedido + última vez (F.2), sin N+1. */
+    private Map<Long, Object[]> myStatsFor(Long userId, List<Long> requestIds) {
+        Map<Long, Object[]> myStats = new HashMap<>();
+        if (!requestIds.isEmpty()) {
+            for (Object[] row : commitmentRepository
+                    .findMyPrayerStatsGroupedByPrayerRequestIds(userId, requestIds)) {
+                myStats.put((Long) row[0], new Object[]{row[1], row[2]});
+            }
+        }
+        return myStats;
     }
 
     private PrayerRequestResponse toResponse(PrayerRequest pr, int commitmentCount, int prayedByCount) {
+        return toResponse(pr, commitmentCount, prayedByCount, Map.of(), pr.getId());
+    }
+
+    private PrayerRequestResponse toResponse(PrayerRequest pr, int commitmentCount, int prayedByCount,
+                                              Map<Long, Object[]> myStats, Long requestId) {
+        Object[] stat = myStats.get(requestId);
+        int myPrayerCount = stat != null ? ((Long) stat[0]).intValue() : 0;
+        String myLastPrayedAt = stat != null && stat[1] != null ? ((Instant) stat[1]).toString() : null;
+        return toResponse(pr, commitmentCount, prayedByCount, myPrayerCount, myLastPrayedAt);
+    }
+
+    private PrayerRequestResponse toResponse(PrayerRequest pr, int commitmentCount, int prayedByCount,
+                                              int myPrayerCount, String myLastPrayedAt) {
         return new PrayerRequestResponse(
                 pr.getId(),
                 pr.getAuthor().getId(),
@@ -432,7 +489,9 @@ public class PrayerRequestService {
                 prayedByCount,
                 pr.getVisibility().name(),
                 pr.getGroup() != null ? pr.getGroup().getId() : null,
-                pr.getGroup() != null ? pr.getGroup().getName() : null
+                pr.getGroup() != null ? pr.getGroup().getName() : null,
+                myPrayerCount,
+                myLastPrayedAt
         );
     }
 }
