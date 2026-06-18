@@ -476,4 +476,46 @@ class PrayerRequestServiceTest {
         assertThat(history.getContent().get(0).myPrayerCount()).isEqualTo(3);
         assertThat(history.getContent().get(0).myLastPrayedAt()).isEqualTo("2026-05-26T09:00:00Z");
     }
+
+    @Test
+    void deletePersonal_authorOnPrivateRequest_deletes() {
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, null, author, PrayerRequestStatus.ACTIVE);
+        pr.setVisibility(PrayerVisibility.PRIVATE);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+
+        service.deletePersonal(10L, 1L);
+
+        verify(sessionPrayerRequestRepository).deleteByPrayerRequestId(10L);
+        verify(commitmentRepository).deleteByPrayerRequestId(10L);
+        verify(prayerRequestRepository).delete(pr);
+    }
+
+    @Test
+    void deletePersonal_notAuthor_throwsForbidden() {
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, null, author, PrayerRequestStatus.ACTIVE);
+        pr.setVisibility(PrayerVisibility.PRIVATE);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+
+        assertThatThrownBy(() -> service.deletePersonal(10L, 2L))
+                .isInstanceOf(ForbiddenException.class);
+        verify(prayerRequestRepository, never()).delete(any());
+    }
+
+    @Test
+    void deletePersonal_alreadySharedWithGroup_throwsForbidden() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
+        pr.setVisibility(PrayerVisibility.GROUP);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+
+        assertThatThrownBy(() -> service.deletePersonal(10L, 1L))
+                .isInstanceOf(ForbiddenException.class);
+        verify(prayerRequestRepository, never()).delete(any());
+    }
 }

@@ -422,6 +422,23 @@ public class PrayerRequestService {
         prayerRequestRepository.delete(pr);
     }
 
+    /**
+     * Elimina un pedido privado del propio usuario (espacio personal). Solo el
+     * autor, y solo mientras siga PRIVATE — una vez compartido con un grupo,
+     * el borrado pasa a depender del admin del grupo (delete()).
+     */
+    public void deletePersonal(Long id, Long userId) {
+        PrayerRequest pr = prayerRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("PrayerRequest", "id", id));
+        if (!pr.getAuthor().getId().equals(userId) || pr.getVisibility() != PrayerVisibility.PRIVATE) {
+            throw new ForbiddenException("No podés eliminar este pedido");
+        }
+
+        sessionPrayerRequestRepository.deleteByPrayerRequestId(id);
+        commitmentRepository.deleteByPrayerRequestId(id);
+        prayerRequestRepository.delete(pr);
+    }
+
     private PrayerRequest findInGroup(Long id, Long groupId) {
         PrayerRequest pr = prayerRequestRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PrayerRequest", "id", id));
