@@ -9,6 +9,10 @@ spring:
     show-sql: false
   flyway:
     baseline-on-migrate: true
+  mail:
+    host: localhost
+    port: 25
+    password: ""
 
 app:
   timer:

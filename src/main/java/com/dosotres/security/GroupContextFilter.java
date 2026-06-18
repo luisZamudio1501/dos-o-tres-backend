@@ -45,6 +45,8 @@ public class GroupContextFilter extends OncePerRequestFilter {
                 // Cronómetro: la sesión es del usuario; el acceso a cada pedido
                 // se valida por-pedido en attach (sesión unificada cross-group).
                 new AntPathRequestMatcher("/api/timer/**"),
+                // Formulario de contacto: es del usuario, sin contexto de grupo.
+                new AntPathRequestMatcher("/api/contact/**"),
                 new AntPathRequestMatcher("/actuator/**"),
                 new AntPathRequestMatcher("/swagger-ui/**"),
                 new AntPathRequestMatcher("/v3/api-docs/**")

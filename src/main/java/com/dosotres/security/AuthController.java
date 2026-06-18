@@ -1,8 +1,10 @@
 package com.dosotres.security;
 
 import com.dosotres.security.dto.AuthResponse;
+import com.dosotres.security.dto.ForgotPasswordRequest;
 import com.dosotres.security.dto.LoginRequest;
 import com.dosotres.security.dto.RegisterRequest;
+import com.dosotres.security.dto.ResetPasswordRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,18 +13,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Los errores van por GlobalExceptionHandler para que SIEMPRE haya un body
- * JSON con message (fixes 3.2 y 3.3 — antes el 409/401 salían vacíos).
- */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
         this.authService = authService;
+        this.passwordResetService = passwordResetService;
     }
 
     @PostMapping("/register")
@@ -34,5 +34,17 @@ public class AuthController {
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/forgot-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        passwordResetService.requestReset(request.email());
+    }
+
+    @PostMapping("/reset-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        passwordResetService.resetPassword(request.token(), request.newPassword());
     }
 }

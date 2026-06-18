@@ -9,6 +9,17 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  mail:
+    host: smtp.resend.com
+    port: 465
+    username: resend
+    password: ${RESEND_API_KEY:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
 
 server:
   port: 8080
@@ -27,3 +38,7 @@ app:
       public-key: ${VAPID_PUBLIC_KEY:}
       private-key: ${VAPID_PRIVATE_KEY:}
       subject: ${VAPID_SUBJECT:mailto:soporte@mateo1819.org}
+  mail:
+    from: "Mateo1819 <noreply@mateo1819.org>"
+    support: soporte@mateo1819.org
+    base-url: ${APP_BASE_URL:https://app.mateo1819.org}
