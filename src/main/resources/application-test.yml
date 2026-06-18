@@ -19,3 +19,5 @@ app:
     cleanup-enabled: false
   goal:
     reminders-enabled: false
+  reengagement:
+    enabled: false

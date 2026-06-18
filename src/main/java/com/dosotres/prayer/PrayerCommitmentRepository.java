@@ -5,6 +5,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -67,4 +68,20 @@ public interface PrayerCommitmentRepository extends JpaRepository<PrayerCommitme
             countQuery = "select count(distinct c.prayerRequest) from PrayerCommitment c "
                     + "where c.user.id = :userId and c.fulfilled = true")
     Page<PrayerHistoryRow> findPrayerHistoryByUserId(@Param("userId") Long userId, Pageable pageable);
+
+    /**
+     * Para el re-engagement (F.3): por usuario, cuántos pedidos ACTIVE/ON_HOLD
+     * comprometió y no oró (fulfilled=true) en los últimos N días. Solo aparecen
+     * usuarios con al menos un pedido en espera.
+     */
+    @Query("select c.user.id, count(distinct c.prayerRequest.id) from PrayerCommitment c "
+            + "where c.prayerRequest.status in :statuses "
+            + "and not exists ("
+            + "  select 1 from PrayerCommitment c2 "
+            + "  where c2.user = c.user and c2.prayerRequest = c.prayerRequest "
+            + "  and c2.fulfilled = true and c2.fulfilledAt >= :cutoff"
+            + ") "
+            + "group by c.user.id")
+    List<Object[]> findStaleRequestCountsByUser(
+            @Param("statuses") List<PrayerRequestStatus> statuses, @Param("cutoff") Instant cutoff);
 }

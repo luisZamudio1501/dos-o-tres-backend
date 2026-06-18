@@ -42,3 +42,6 @@ app:
     from: "Mateo1819 <noreply@mateo1819.org>"
     support: soporte@mateo1819.org
     base-url: ${APP_BASE_URL:https://app.mateo1819.org}
+  reengagement:
+    stale-days: 3
+    cron: "0 0 9 * * *"

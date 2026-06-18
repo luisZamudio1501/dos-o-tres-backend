@@ -11,6 +11,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "users")
@@ -57,6 +58,9 @@ public class User {
 
     @Column(name = "max_groups", nullable = false)
     private Integer maxGroups = 3;
+
+    @Column(name = "last_reengaged_on")
+    private LocalDate lastReengagedOn;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -170,6 +174,14 @@ public class User {
 
     public void setMaxGroups(Integer maxGroups) {
         this.maxGroups = maxGroups;
+    }
+
+    public LocalDate getLastReengagedOn() {
+        return lastReengagedOn;
+    }
+
+    public void setLastReengagedOn(LocalDate lastReengagedOn) {
+        this.lastReengagedOn = lastReengagedOn;
     }
 
     public Instant getCreatedAt() {
