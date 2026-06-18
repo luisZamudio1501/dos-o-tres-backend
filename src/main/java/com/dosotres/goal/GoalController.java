@@ -2,6 +2,7 @@ package com.dosotres.goal;
 
 import com.dosotres.goal.dto.CreateGoalRequest;
 import com.dosotres.goal.dto.GoalResponse;
+import com.dosotres.goal.dto.ReminderStatusResponse;
 import com.dosotres.goal.dto.UpdateGoalRequest;
 import com.dosotres.security.annotations.AuthUser;
 import jakarta.validation.Valid;
@@ -57,5 +58,10 @@ public class GoalController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id, @AuthUser Long userId) {
         goalService.delete(id, userId);
+    }
+
+    @GetMapping("/{id}/reminder-status")
+    public ReminderStatusResponse reminderStatus(@PathVariable Long id, @AuthUser Long userId) {
+        return goalService.reminderStatus(id, userId);
     }
 }

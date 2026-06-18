@@ -5,6 +5,7 @@ import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.common.exception.ValidationException;
 import com.dosotres.goal.dto.CreateGoalRequest;
 import com.dosotres.goal.dto.GoalResponse;
+import com.dosotres.goal.dto.ReminderStatusResponse;
 import com.dosotres.goal.dto.UpdateGoalRequest;
 import com.dosotres.stats.StatsRepository;
 import com.dosotres.timer.PrayerSession;
@@ -130,6 +131,44 @@ public class GoalService {
     public void markRemindedToday(PrayerGoal goal) {
         goal.setLastRemindedOn(LocalDate.ofInstant(clock.instant(), zoneOf(goal)));
         goalRepository.save(goal);
+    }
+
+    /**
+     * Diagnóstico legible de si esta meta avisará hoy y por qué (no). Misma
+     * decisión que {@link #isReminderDue}, pero explicada para soporte/UI.
+     */
+    @Transactional(readOnly = true)
+    public ReminderStatusResponse reminderStatus(Long id, Long userId) {
+        PrayerGoal goal = findOwned(id, userId);
+        String scheduledTime = goal.getScheduledTime() != null ? goal.getScheduledTime().toString() : null;
+
+        if (goal.getMode() == GoalMode.FREE) {
+            return new ReminderStatusResponse(goal.getMode().name(), null, false,
+                    "Modo libre: esta meta no envía recordatorios.");
+        }
+
+        ZoneId zone = zoneOf(goal);
+        Instant now = clock.instant();
+        LocalDate today = LocalDate.ofInstant(now, zone);
+
+        if (today.isBefore(goal.getPeriodStart()) || today.isAfter(goal.getPeriodEnd())) {
+            return new ReminderStatusResponse(goal.getMode().name(), scheduledTime, false,
+                    "La meta no está activa hoy (fuera del período).");
+        }
+        if (today.equals(goal.getLastRemindedOn())) {
+            return new ReminderStatusResponse(goal.getMode().name(), scheduledTime, false,
+                    "Ya se envió el recordatorio de hoy.");
+        }
+        if (LocalTime.ofInstant(now, zone).isBefore(goal.getScheduledTime())) {
+            return new ReminderStatusResponse(goal.getMode().name(), scheduledTime, true,
+                    "Te avisaremos hoy a las " + scheduledTime + ".");
+        }
+        if (hasMetToday(goal, zone, today)) {
+            return new ReminderStatusResponse(goal.getMode().name(), scheduledTime, false,
+                    "Ya cumpliste la meta de hoy: no se enviará recordatorio.");
+        }
+        return new ReminderStatusResponse(goal.getMode().name(), scheduledTime, true,
+                "Se enviará el recordatorio en la próxima corrida (cada pocos minutos).");
     }
 
     // ── internos ──
