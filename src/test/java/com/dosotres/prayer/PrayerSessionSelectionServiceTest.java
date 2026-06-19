@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class PrayerSessionSelectionServiceTest {
@@ -54,13 +55,16 @@ class PrayerSessionSelectionServiceTest {
     private PrayerSessionPort sessionPort;
     @Mock
     private ActivityService activityService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private PrayerSessionSelectionService service;
 
     @BeforeEach
     void setUp() {
         service = new PrayerSessionSelectionService(sessionRequestRepository, prayerRequestRepository,
-                commitmentRepository, userRepository, groupMemberRepository, sessionPort, activityService, FIXED_CLOCK);
+                commitmentRepository, userRepository, groupMemberRepository, sessionPort, activityService,
+                eventPublisher, FIXED_CLOCK);
     }
 
     private Group makeGroup(Long id) {
@@ -80,6 +84,7 @@ class PrayerSessionSelectionServiceTest {
         PrayerRequest pr = new PrayerRequest();
         pr.setId(id);
         pr.setGroup(group);
+        pr.setAuthor(makeUser(2L));
         pr.setTitle("Pedido " + id);
         pr.setStatus(status);
         return pr;
@@ -179,6 +184,7 @@ class PrayerSessionSelectionServiceTest {
         verify(commitmentRepository, times(2)).save(any(PrayerCommitment.class));
         verify(activityService).record(eq(group), eq(user), eq(ActivityEventType.COMMITMENT_FULFILLED), eq(false), anyMap());
         verify(activityService).record(eq(group), eq(user), eq(ActivityEventType.COMMITMENT_FULFILLED), eq(true), anyMap());
+        verify(eventPublisher, times(2)).publishEvent(any(PrayerPrayedEvent.class));
     }
 
     @Test
@@ -209,6 +215,7 @@ class PrayerSessionSelectionServiceTest {
         assertThat(fulfilled).isZero();
         verify(commitmentRepository, never()).save(any(PrayerCommitment.class));
         verify(activityService, never()).record(any(), any(), any(), anyBoolean(), anyMap());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

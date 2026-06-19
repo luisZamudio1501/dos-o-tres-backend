@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +43,7 @@ public class PrayerSessionSelectionService {
     private final GroupMemberRepository groupMemberRepository;
     private final PrayerSessionPort sessionPort;
     private final ActivityService activityService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public PrayerSessionSelectionService(SessionPrayerRequestRepository sessionRequestRepository,
@@ -51,6 +53,7 @@ public class PrayerSessionSelectionService {
                                          GroupMemberRepository groupMemberRepository,
                                          PrayerSessionPort sessionPort,
                                          ActivityService activityService,
+                                         ApplicationEventPublisher eventPublisher,
                                          Clock clock) {
         this.sessionRequestRepository = sessionRequestRepository;
         this.prayerRequestRepository = prayerRequestRepository;
@@ -59,6 +62,7 @@ public class PrayerSessionSelectionService {
         this.groupMemberRepository = groupMemberRepository;
         this.sessionPort = sessionPort;
         this.activityService = activityService;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -150,6 +154,11 @@ public class PrayerSessionSelectionService {
                         Map.of("prayerRequestId", pr.getId(),
                                 "prayerTitle", pr.getTitle()));
             }
+
+            // Push asíncrono (tras commit) al autor del pedido.
+            eventPublisher.publishEvent(new PrayerPrayedEvent(
+                    pr.getId(), pr.getTitle(), pr.getAuthor().getId(), userId, user.getDisplayName(),
+                    selection.isPrivate()));
             fulfilled++;
         }
 

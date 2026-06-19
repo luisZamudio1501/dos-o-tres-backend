@@ -8,7 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.dosotres.group.GroupMemberRepository;
-import com.dosotres.prayer.PrayerAnsweredEvent;
+import com.dosotres.prayer.PrayerRequestCreatedEvent;
 import com.dosotres.user.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Collection;
@@ -21,7 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class PrayerAnsweredPushListenerTest {
+class PrayerRequestCreatedPushListenerTest {
 
     private static final Long REQUEST = 10L;
     private static final Long GROUP = 5L;
@@ -34,56 +34,47 @@ class PrayerAnsweredPushListenerTest {
     @Mock
     private UserRepository userRepository;
 
-    private PrayerAnsweredPushListener listener;
+    private PrayerRequestCreatedPushListener listener;
 
     @BeforeEach
     void setUp() {
-        listener = new PrayerAnsweredPushListener(pushService, groupMemberRepository, userRepository,
+        listener = new PrayerRequestCreatedPushListener(pushService, groupMemberRepository, userRepository,
                 new ObjectMapper());
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void onPrayerAnswered_notifiesGroupMembersWhoOptedIn() {
-        when(groupMemberRepository.findUserIdsByGroupId(GROUP)).thenReturn(List.of(1L, 2L, 3L));
-        when(userRepository.findIdByIdInAndNotifyOnAnsweredTrue(List.of(1L, 2L, 3L)))
-                .thenReturn(List.of(1L, 3L));
+    void onPrayerRequestCreated_notifiesGroupExceptAuthor() {
+        when(groupMemberRepository.findUserIdsByGroupId(GROUP)).thenReturn(List.of(AUTHOR, 2L, 3L));
+        when(userRepository.findIdByIdInAndNotifyOnRequestCreatedTrue(List.of(2L, 3L)))
+                .thenReturn(List.of(2L, 3L));
 
-        listener.onPrayerAnswered(new PrayerAnsweredEvent(REQUEST, "Salud de mamá", AUTHOR, GROUP));
+        listener.onPrayerRequestCreated(new PrayerRequestCreatedEvent(REQUEST, "Salud de mamá", AUTHOR, GROUP));
 
         ArgumentCaptor<Collection<Long>> recipients = ArgumentCaptor.forClass(Collection.class);
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(pushService).sendToUsers(recipients.capture(), payload.capture());
 
-        assertThat(recipients.getValue()).containsExactlyInAnyOrder(1L, 3L);
+        assertThat(recipients.getValue()).containsExactlyInAnyOrder(2L, 3L);
         assertThat(payload.getValue()).contains("Salud de mamá");
-        assertThat(payload.getValue()).contains("/prayer/10");
     }
 
     @Test
-    void onPrayerAnswered_noopWhenGroupHasNoMembers() {
-        when(groupMemberRepository.findUserIdsByGroupId(GROUP)).thenReturn(List.of());
+    void onPrayerRequestCreated_noopWhenOnlyAuthorInGroup() {
+        when(groupMemberRepository.findUserIdsByGroupId(GROUP)).thenReturn(List.of(AUTHOR));
 
-        listener.onPrayerAnswered(new PrayerAnsweredEvent(REQUEST, "Sin miembros", AUTHOR, GROUP));
+        listener.onPrayerRequestCreated(new PrayerRequestCreatedEvent(REQUEST, "Solo yo", AUTHOR, GROUP));
 
         verify(pushService, never()).sendToUsers(any(), anyString());
     }
 
     @Test
-    void onPrayerAnswered_noopWhenNoMemberOptedIn() {
-        when(groupMemberRepository.findUserIdsByGroupId(GROUP)).thenReturn(List.of(1L, 2L));
-        when(userRepository.findIdByIdInAndNotifyOnAnsweredTrue(List.of(1L, 2L))).thenReturn(List.of());
+    void onPrayerRequestCreated_noopWhenNoMemberOptedIn() {
+        when(groupMemberRepository.findUserIdsByGroupId(GROUP)).thenReturn(List.of(AUTHOR, 2L));
+        when(userRepository.findIdByIdInAndNotifyOnRequestCreatedTrue(List.of(2L))).thenReturn(List.of());
 
-        listener.onPrayerAnswered(new PrayerAnsweredEvent(REQUEST, "Nadie quiere avisos", AUTHOR, GROUP));
-
-        verify(pushService, never()).sendToUsers(any(), anyString());
-    }
-
-    @Test
-    void onPrayerAnswered_noopWhenPrivatePrayer() {
-        listener.onPrayerAnswered(new PrayerAnsweredEvent(REQUEST, "Privado", AUTHOR, null));
+        listener.onPrayerRequestCreated(new PrayerRequestCreatedEvent(REQUEST, "Nadie quiere avisos", AUTHOR, GROUP));
 
         verify(pushService, never()).sendToUsers(any(), anyString());
-        verify(groupMemberRepository, never()).findUserIdsByGroupId(any());
     }
 }

@@ -14,5 +14,8 @@ public record UpdateProfileRequest(
         String country,
         @Size(max = 100) String province,
         @Size(max = 100) String city,
-        @Size(max = 150) String churchName
+        @Size(max = 150) String churchName,
+        Boolean notifyOnRequestCreated,
+        Boolean notifyOnPrayed,
+        Boolean notifyOnAnswered
 ) {}

@@ -63,7 +63,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                "Luis Z.", "ar", "Santa Fe", "Rosario", "Iglesia Bautista Centro"));
+                "Luis Z.", "ar", "Santa Fe", "Rosario", "Iglesia Bautista Centro", null, null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis Z.");
         assertThat(res.country()).isEqualTo("AR");
@@ -82,7 +82,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, "  ", "", null));
+                null, null, "  ", "", null, null, null, null));
 
         assertThat(res.country()).isNull();
         assertThat(res.province()).isNull();
@@ -95,7 +95,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, "AR", null, "Rosario", null));
+                null, "AR", null, "Rosario", null, null, null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis");
         assertThat(res.country()).isEqualTo("AR");
@@ -107,9 +107,32 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                "  Luis Z.  ", null, null, "  Rosario  ", null));
+                "  Luis Z.  ", null, null, "  Rosario  ", null, null, null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis Z.");
         assertThat(res.city()).isEqualTo("Rosario");
+    }
+
+    @Test
+    void getProfile_notificationPreferences_defaultTrue() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
+
+        UserProfileResponse res = userService.getProfile(1L);
+
+        assertThat(res.notifyOnRequestCreated()).isTrue();
+        assertThat(res.notifyOnPrayed()).isTrue();
+        assertThat(res.notifyOnAnswered()).isTrue();
+    }
+
+    @Test
+    void updateProfile_notificationPreferences_onlyTouchesNonNullFlags() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
+
+        UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
+                null, null, null, null, null, false, null, false));
+
+        assertThat(res.notifyOnRequestCreated()).isFalse();
+        assertThat(res.notifyOnPrayed()).isTrue();
+        assertThat(res.notifyOnAnswered()).isFalse();
     }
 }

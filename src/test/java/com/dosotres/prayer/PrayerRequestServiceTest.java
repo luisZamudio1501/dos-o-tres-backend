@@ -119,6 +119,7 @@ class PrayerRequestServiceTest {
         assertThat(response.title()).isEqualTo("Salud para mamá");
         assertThat(response.authorName()).isEqualTo("Luis");
         assertThat(response.answeredAt()).isNull();
+        verify(eventPublisher).publishEvent(any(PrayerRequestCreatedEvent.class));
     }
 
     @Test
@@ -356,6 +357,7 @@ class PrayerRequestServiceTest {
         assertThat(pr.getStatus()).isEqualTo(PrayerRequestStatus.ON_HOLD);
         verify(activityService).record(eq(group), eq(prayer),
                 eq(ActivityEventType.COMMITMENT_FULFILLED), eq(false), anyMap());
+        verify(eventPublisher).publishEvent(any(PrayerPrayedEvent.class));
     }
 
     @Test
@@ -377,6 +379,7 @@ class PrayerRequestServiceTest {
 
         verify(commitmentRepository, never()).save(any(PrayerCommitment.class));
         verify(activityService, never()).record(any(), any(), any(), anyBoolean(), anyMap());
+        verify(eventPublisher, never()).publishEvent(any(PrayerPrayedEvent.class));
     }
 
     @Test

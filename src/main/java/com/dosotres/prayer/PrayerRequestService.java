@@ -109,6 +109,9 @@ public class PrayerRequestService {
         activityService.record(group, user, ActivityEventType.REQUEST_CREATED, false,
                 Map.of("prayerRequestId", pr.getId(), "prayerTitle", pr.getTitle()));
 
+        // Push asíncrono (tras commit) al resto del grupo.
+        eventPublisher.publishEvent(new PrayerRequestCreatedEvent(pr.getId(), pr.getTitle(), userId, groupId));
+
         return toResponse(pr, 0, 0); // recién creado: nadie oró todavía
     }
 
@@ -315,6 +318,10 @@ public class PrayerRequestService {
             activityService.record(pr.getGroup(), user,
                     ActivityEventType.COMMITMENT_FULFILLED, isPrivate,
                     Map.of("prayerRequestId", pr.getId(), "prayerTitle", pr.getTitle()));
+
+            // Push asíncrono (tras commit) al autor del pedido.
+            eventPublisher.publishEvent(new PrayerPrayedEvent(
+                    pr.getId(), pr.getTitle(), pr.getAuthor().getId(), userId, user.getDisplayName(), isPrivate));
         }
 
         if (pr.getStatus() == PrayerRequestStatus.ACTIVE) {

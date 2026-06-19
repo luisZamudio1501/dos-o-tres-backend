@@ -7,5 +7,8 @@ public record UserProfileResponse(
         String country,
         String province,
         String city,
-        String churchName
+        String churchName,
+        boolean notifyOnRequestCreated,
+        boolean notifyOnPrayed,
+        boolean notifyOnAnswered
 ) {}

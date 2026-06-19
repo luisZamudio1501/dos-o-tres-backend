@@ -62,6 +62,16 @@ public class User {
     @Column(name = "last_reengaged_on")
     private LocalDate lastReengagedOn;
 
+    // Preferencias de notificación push, una por tipo de evento.
+    @Column(name = "notify_on_request_created", nullable = false)
+    private boolean notifyOnRequestCreated = true;
+
+    @Column(name = "notify_on_prayed", nullable = false)
+    private boolean notifyOnPrayed = true;
+
+    @Column(name = "notify_on_answered", nullable = false)
+    private boolean notifyOnAnswered = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -182,6 +192,30 @@ public class User {
 
     public void setLastReengagedOn(LocalDate lastReengagedOn) {
         this.lastReengagedOn = lastReengagedOn;
+    }
+
+    public boolean isNotifyOnRequestCreated() {
+        return notifyOnRequestCreated;
+    }
+
+    public void setNotifyOnRequestCreated(boolean notifyOnRequestCreated) {
+        this.notifyOnRequestCreated = notifyOnRequestCreated;
+    }
+
+    public boolean isNotifyOnPrayed() {
+        return notifyOnPrayed;
+    }
+
+    public void setNotifyOnPrayed(boolean notifyOnPrayed) {
+        this.notifyOnPrayed = notifyOnPrayed;
+    }
+
+    public boolean isNotifyOnAnswered() {
+        return notifyOnAnswered;
+    }
+
+    public void setNotifyOnAnswered(boolean notifyOnAnswered) {
+        this.notifyOnAnswered = notifyOnAnswered;
     }
 
     public Instant getCreatedAt() {

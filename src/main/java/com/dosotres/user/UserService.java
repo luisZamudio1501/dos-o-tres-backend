@@ -36,6 +36,15 @@ public class UserService {
         user.setProvince(normalize(req.province()));
         user.setCity(normalize(req.city()));
         user.setChurchName(normalize(req.churchName()));
+        if (req.notifyOnRequestCreated() != null) {
+            user.setNotifyOnRequestCreated(req.notifyOnRequestCreated());
+        }
+        if (req.notifyOnPrayed() != null) {
+            user.setNotifyOnPrayed(req.notifyOnPrayed());
+        }
+        if (req.notifyOnAnswered() != null) {
+            user.setNotifyOnAnswered(req.notifyOnAnswered());
+        }
 
         userRepository.save(user);
         return toResponse(user);
@@ -66,7 +75,10 @@ public class UserService {
                 user.getCountry(),
                 user.getProvince(),
                 user.getCity(),
-                user.getChurchName()
+                user.getChurchName(),
+                user.isNotifyOnRequestCreated(),
+                user.isNotifyOnPrayed(),
+                user.isNotifyOnAnswered()
         );
     }
 }
