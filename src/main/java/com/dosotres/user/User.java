@@ -72,6 +72,11 @@ public class User {
     @Column(name = "notify_on_answered", nullable = false)
     private boolean notifyOnAnswered = true;
 
+    // Rol global de comunidad (ADR-006). Default USER; MODERATOR gestiona reportes.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "global_role", nullable = false, length = 20)
+    private GlobalRole globalRole = GlobalRole.USER;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -216,6 +221,14 @@ public class User {
 
     public void setNotifyOnAnswered(boolean notifyOnAnswered) {
         this.notifyOnAnswered = notifyOnAnswered;
+    }
+
+    public GlobalRole getGlobalRole() {
+        return globalRole;
+    }
+
+    public void setGlobalRole(GlobalRole globalRole) {
+        this.globalRole = globalRole;
     }
 
     public Instant getCreatedAt() {

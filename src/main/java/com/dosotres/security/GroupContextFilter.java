@@ -47,6 +47,8 @@ public class GroupContextFilter extends OncePerRequestFilter {
                 new AntPathRequestMatcher("/api/timer/**"),
                 // Formulario de contacto: es del usuario, sin contexto de grupo.
                 new AntPathRequestMatcher("/api/contact/**"),
+                // Moderación (reportes/bloqueos/rol global): comunidad-amplia, sin grupo.
+                new AntPathRequestMatcher("/api/moderation/**"),
                 new AntPathRequestMatcher("/actuator/**"),
                 new AntPathRequestMatcher("/swagger-ui/**"),
                 new AntPathRequestMatcher("/v3/api-docs/**")
