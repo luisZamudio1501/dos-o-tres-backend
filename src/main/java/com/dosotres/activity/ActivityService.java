@@ -1,7 +1,11 @@
 package com.dosotres.activity;
 
 import com.dosotres.activity.dto.ActivityEventResponse;
+import com.dosotres.common.exception.ForbiddenException;
+import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.group.Group;
+import com.dosotres.group.GroupMemberRepository;
+import com.dosotres.group.GroupRole;
 import com.dosotres.user.User;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -17,11 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class ActivityService {
 
     private final ActivityEventRepository activityEventRepository;
+    private final GroupMemberRepository groupMemberRepository;
     private final ObjectMapper objectMapper;
 
     public ActivityService(ActivityEventRepository activityEventRepository,
+                           GroupMemberRepository groupMemberRepository,
                            ObjectMapper objectMapper) {
         this.activityEventRepository = activityEventRepository;
+        this.groupMemberRepository = groupMemberRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -34,6 +41,22 @@ public class ActivityService {
         event.setPrivate(isPrivate);
         event.setPayload(serialize(payload));
         activityEventRepository.save(event);
+    }
+
+    public void delete(Long eventId, Long groupId, Long userId) {
+        ActivityEvent event = activityEventRepository.findById(eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("ActivityEvent", "id", eventId));
+        if (!event.getGroup().getId().equals(groupId)) {
+            throw new ResourceNotFoundException("ActivityEvent", "id+groupId", eventId + "+" + groupId);
+        }
+        boolean isAuthor = event.getActor().getId().equals(userId);
+        boolean isAdmin = groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
+                .map(m -> m.getRole() == GroupRole.ADMIN)
+                .orElse(false);
+        if (!isAuthor && !isAdmin) {
+            throw new ForbiddenException("Only the author or a group admin can delete this activity event");
+        }
+        activityEventRepository.delete(event);
     }
 
     @Transactional(readOnly = true)
