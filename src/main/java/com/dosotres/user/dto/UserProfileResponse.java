@@ -10,6 +10,7 @@ public record UserProfileResponse(
         String churchName,
         String phone,
         String phoneVisibility,
+        String globalRole,
         boolean notifyOnRequestCreated,
         boolean notifyOnPrayed,
         boolean notifyOnAnswered

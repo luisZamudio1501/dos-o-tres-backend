@@ -82,6 +82,7 @@ public class UserService {
                 user.getChurchName(),
                 user.getPhone(),
                 user.getPhoneVisibility().name(),
+                user.getGlobalRole().name(),
                 user.isNotifyOnRequestCreated(),
                 user.isNotifyOnPrayed(),
                 user.isNotifyOnAnswered()
