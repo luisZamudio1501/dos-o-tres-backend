@@ -36,6 +36,10 @@ public class UserService {
         user.setProvince(normalize(req.province()));
         user.setCity(normalize(req.city()));
         user.setChurchName(normalize(req.churchName()));
+        user.setPhone(normalize(req.phone()));
+        if (req.phoneVisibility() != null) {
+            user.setPhoneVisibility(req.phoneVisibility());
+        }
         if (req.notifyOnRequestCreated() != null) {
             user.setNotifyOnRequestCreated(req.notifyOnRequestCreated());
         }
@@ -76,6 +80,8 @@ public class UserService {
                 user.getProvince(),
                 user.getCity(),
                 user.getChurchName(),
+                user.getPhone(),
+                user.getPhoneVisibility().name(),
                 user.isNotifyOnRequestCreated(),
                 user.isNotifyOnPrayed(),
                 user.isNotifyOnAnswered()

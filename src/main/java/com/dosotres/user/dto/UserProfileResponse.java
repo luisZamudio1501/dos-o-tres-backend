@@ -8,6 +8,8 @@ public record UserProfileResponse(
         String province,
         String city,
         String churchName,
+        String phone,
+        String phoneVisibility,
         boolean notifyOnRequestCreated,
         boolean notifyOnPrayed,
         boolean notifyOnAnswered

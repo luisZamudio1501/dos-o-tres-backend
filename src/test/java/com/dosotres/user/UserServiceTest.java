@@ -63,7 +63,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                "Luis Z.", "ar", "Santa Fe", "Rosario", "Iglesia Bautista Centro", null, null, null));
+                "Luis Z.", "ar", "Santa Fe", "Rosario", "Iglesia Bautista Centro", null, null, null, null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis Z.");
         assertThat(res.country()).isEqualTo("AR");
@@ -82,7 +82,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, "  ", "", null, null, null, null));
+                null, null, "  ", "", null, null, null, null, null, null));
 
         assertThat(res.country()).isNull();
         assertThat(res.province()).isNull();
@@ -95,7 +95,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, "AR", null, "Rosario", null, null, null, null));
+                null, "AR", null, "Rosario", null, null, null, null, null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis");
         assertThat(res.country()).isEqualTo("AR");
@@ -107,7 +107,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                "  Luis Z.  ", null, null, "  Rosario  ", null, null, null, null));
+                "  Luis Z.  ", null, null, "  Rosario  ", null, null, null, null, null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis Z.");
         assertThat(res.city()).isEqualTo("Rosario");
@@ -129,10 +129,43 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, null, null, null, false, null, false));
+                null, null, null, null, null, null, null, false, null, false));
 
         assertThat(res.notifyOnRequestCreated()).isFalse();
         assertThat(res.notifyOnPrayed()).isTrue();
         assertThat(res.notifyOnAnswered()).isFalse();
+    }
+
+    @Test
+    void getProfile_phone_defaultsToNullAndPrivate() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
+
+        UserProfileResponse res = userService.getProfile(1L);
+
+        assertThat(res.phone()).isNull();
+        assertThat(res.phoneVisibility()).isEqualTo("PRIVATE");
+    }
+
+    @Test
+    void updateProfile_setsPhoneAndVisibility() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
+
+        UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
+                null, null, null, null, null, "+54 341 5550000", PhoneVisibility.GROUP, null, null, null));
+
+        assertThat(res.phone()).isEqualTo("+54 341 5550000");
+        assertThat(res.phoneVisibility()).isEqualTo("GROUP");
+    }
+
+    @Test
+    void updateProfile_blankPhoneClearsIt() {
+        User user = makeUser();
+        user.setPhone("+54 341 5550000");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
+                null, null, null, null, null, "  ", null, null, null, null));
+
+        assertThat(res.phone()).isNull();
     }
 }

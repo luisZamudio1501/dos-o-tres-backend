@@ -52,6 +52,14 @@ public class User {
     @Column(name = "church_name", length = 150)
     private String churchName;
 
+    // Contacto opcional (M.1). Privado por defecto; nunca en el muro público.
+    @Column(length = 30)
+    private String phone;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "phone_visibility", nullable = false, length = 20)
+    private PhoneVisibility phoneVisibility = PhoneVisibility.PRIVATE;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "subscription_tier", nullable = false)
     private SubscriptionTier subscriptionTier = SubscriptionTier.FREE;
@@ -221,6 +229,22 @@ public class User {
 
     public void setNotifyOnAnswered(boolean notifyOnAnswered) {
         this.notifyOnAnswered = notifyOnAnswered;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public PhoneVisibility getPhoneVisibility() {
+        return phoneVisibility;
+    }
+
+    public void setPhoneVisibility(PhoneVisibility phoneVisibility) {
+        this.phoneVisibility = phoneVisibility;
     }
 
     public GlobalRole getGlobalRole() {
