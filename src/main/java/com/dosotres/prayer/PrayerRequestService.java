@@ -409,18 +409,20 @@ public class PrayerRequestService {
     }
 
     /**
-     * Elimina un pedido de oración. Regla de negocio: solo el administrador del
-     * grupo puede borrar (cualquier pedido del grupo). Un miembro no admin no
-     * puede borrar pedidos, ni siquiera los propios — solo puede salir del grupo.
+     * Elimina un pedido de oración del grupo. Regla de negocio: el autor puede
+     * borrar su propio pedido, y el administrador del grupo puede borrar
+     * cualquiera (mismo criterio que marcar como respondido). Un miembro que no
+     * es ni autor ni admin no puede borrar pedidos ajenos.
      */
     public void delete(Long id, Long groupId, Long userId) {
         PrayerRequest pr = findInGroup(id, groupId);
 
+        boolean isAuthor = pr.getAuthor().getId().equals(userId);
         boolean isAdmin = groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
                 .map(m -> m.getRole() == GroupRole.ADMIN)
                 .orElse(false);
-        if (!isAdmin) {
-            throw new ForbiddenException("Only a group admin can delete prayer requests");
+        if (!isAuthor && !isAdmin) {
+            throw new ForbiddenException("Only the author or a group admin can delete prayer requests");
         }
 
         // FKs con RESTRICT: eliminar hijos antes que el pedido.

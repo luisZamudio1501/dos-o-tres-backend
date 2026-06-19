@@ -319,7 +319,7 @@ class PrayerRequestServiceTest {
     }
 
     @Test
-    void delete_nonAdminThrowsForbiddenAndDeletesNothing() {
+    void delete_authorRemovesOwnRequestEvenIfNotAdmin() {
         Group group = makeGroup(1L);
         User author = makeUser(1L, "Luis");
         PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
@@ -330,7 +330,26 @@ class PrayerRequestServiceTest {
         when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
         when(groupMemberRepository.findByGroupIdAndUserId(1L, 1L)).thenReturn(Optional.of(member));
 
-        assertThatThrownBy(() -> service.delete(10L, 1L, 1L))
+        service.delete(10L, 1L, 1L);
+
+        verify(sessionPrayerRequestRepository).deleteByPrayerRequestId(10L);
+        verify(commitmentRepository).deleteByPrayerRequestId(10L);
+        verify(prayerRequestRepository).delete(pr);
+    }
+
+    @Test
+    void delete_nonAuthorNonAdminThrowsForbiddenAndDeletesNothing() {
+        Group group = makeGroup(1L);
+        User author = makeUser(1L, "Luis");
+        PrayerRequest pr = makePrayerRequest(10L, group, author, PrayerRequestStatus.ACTIVE);
+
+        GroupMember member = new GroupMember();
+        member.setRole(GroupRole.MEMBER);
+
+        when(prayerRequestRepository.findById(10L)).thenReturn(Optional.of(pr));
+        when(groupMemberRepository.findByGroupIdAndUserId(1L, 2L)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> service.delete(10L, 1L, 2L))
                 .isInstanceOf(ForbiddenException.class);
         verify(prayerRequestRepository, never()).delete(any(PrayerRequest.class));
     }
