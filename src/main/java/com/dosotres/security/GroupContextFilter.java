@@ -49,6 +49,8 @@ public class GroupContextFilter extends OncePerRequestFilter {
                 new AntPathRequestMatcher("/api/contact/**"),
                 // Moderación (reportes/bloqueos/rol global): comunidad-amplia, sin grupo.
                 new AntPathRequestMatcher("/api/moderation/**"),
+                // Muro público: pedidos visibles para toda la comunidad, sin grupo.
+                new AntPathRequestMatcher("/api/public/**"),
                 new AntPathRequestMatcher("/actuator/**"),
                 new AntPathRequestMatcher("/swagger-ui/**"),
                 new AntPathRequestMatcher("/v3/api-docs/**")
