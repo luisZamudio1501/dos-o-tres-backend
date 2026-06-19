@@ -38,12 +38,15 @@ class ModerationServiceTest {
     private UserBlockRepository userBlockRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private ModerationAccess moderationAccess;
 
     private ModerationService service;
 
     @BeforeEach
     void setUp() {
-        service = new ModerationService(reportRepository, userBlockRepository, userRepository, FIXED_CLOCK);
+        service = new ModerationService(reportRepository, userBlockRepository, userRepository,
+                moderationAccess, FIXED_CLOCK);
     }
 
     private User makeUser(Long id, String name, GlobalRole role) {
@@ -81,7 +84,7 @@ class ModerationServiceTest {
 
     @Test
     void listReports_byNonModerator_throwsForbidden() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser(1L, "Ana", GlobalRole.USER)));
+        when(moderationAccess.requireModerator(1L)).thenThrow(new ForbiddenException("no mod"));
 
         assertThatThrownBy(() -> service.listReports(1L, ReportStatus.OPEN))
                 .isInstanceOf(ForbiddenException.class);
@@ -90,9 +93,7 @@ class ModerationServiceTest {
 
     @Test
     void listReports_byModerator_returnsReports() {
-        User mod = makeUser(5L, "Luis", GlobalRole.MODERATOR);
         User reporter = makeUser(1L, "Ana", GlobalRole.USER);
-        when(userRepository.findById(5L)).thenReturn(Optional.of(mod));
         when(reportRepository.findByStatusOrderByCreatedAtAsc(ReportStatus.OPEN))
                 .thenReturn(List.of(makeReport(10L, reporter, ReportStatus.OPEN)));
 
@@ -107,7 +108,7 @@ class ModerationServiceTest {
         User mod = makeUser(5L, "Luis", GlobalRole.MODERATOR);
         User reporter = makeUser(1L, "Ana", GlobalRole.USER);
         Report report = makeReport(10L, reporter, ReportStatus.OPEN);
-        when(userRepository.findById(5L)).thenReturn(Optional.of(mod));
+        when(moderationAccess.requireModerator(5L)).thenReturn(mod);
         when(reportRepository.findById(10L)).thenReturn(Optional.of(report));
 
         ReportResponse res = service.resolveReport(5L, 10L, ReportStatus.RESOLVED);
@@ -119,7 +120,7 @@ class ModerationServiceTest {
 
     @Test
     void resolveReport_byNonModerator_throwsForbidden() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser(1L, "Ana", GlobalRole.USER)));
+        when(moderationAccess.requireModerator(1L)).thenThrow(new ForbiddenException("no mod"));
 
         assertThatThrownBy(() -> service.resolveReport(1L, 10L, ReportStatus.RESOLVED))
                 .isInstanceOf(ForbiddenException.class);
@@ -128,7 +129,7 @@ class ModerationServiceTest {
 
     @Test
     void resolveReport_toOpen_throwsValidation() {
-        when(userRepository.findById(5L)).thenReturn(Optional.of(makeUser(5L, "Luis", GlobalRole.MODERATOR)));
+        when(moderationAccess.requireModerator(5L)).thenReturn(makeUser(5L, "Luis", GlobalRole.MODERATOR));
 
         assertThatThrownBy(() -> service.resolveReport(5L, 10L, ReportStatus.OPEN))
                 .isInstanceOf(ValidationException.class);

@@ -1,12 +1,10 @@
 package com.dosotres.moderation;
 
-import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.common.exception.ValidationException;
 import com.dosotres.moderation.dto.BlockedUserResponse;
 import com.dosotres.moderation.dto.CreateReportRequest;
 import com.dosotres.moderation.dto.ReportResponse;
-import com.dosotres.user.GlobalRole;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.time.Clock;
@@ -21,15 +19,18 @@ public class ModerationService {
     private final ReportRepository reportRepository;
     private final UserBlockRepository userBlockRepository;
     private final UserRepository userRepository;
+    private final ModerationAccess moderationAccess;
     private final Clock clock;
 
     public ModerationService(ReportRepository reportRepository,
                              UserBlockRepository userBlockRepository,
                              UserRepository userRepository,
+                             ModerationAccess moderationAccess,
                              Clock clock) {
         this.reportRepository = reportRepository;
         this.userBlockRepository = userBlockRepository;
         this.userRepository = userRepository;
+        this.moderationAccess = moderationAccess;
         this.clock = clock;
     }
 
@@ -54,7 +55,7 @@ public class ModerationService {
     /** Solo moderador global: cola de reportes por estado. */
     @Transactional(readOnly = true)
     public List<ReportResponse> listReports(Long requesterId, ReportStatus status) {
-        requireModerator(requesterId);
+        moderationAccess.requireModerator(requesterId);
         return reportRepository.findByStatusOrderByCreatedAtAsc(status).stream()
                 .map(this::toResponse)
                 .toList();
@@ -62,7 +63,7 @@ public class ModerationService {
 
     /** Solo moderador global: resolver o descartar un reporte. */
     public ReportResponse resolveReport(Long requesterId, Long reportId, ReportStatus newStatus) {
-        User moderator = requireModerator(requesterId);
+        User moderator = moderationAccess.requireModerator(requesterId);
         if (newStatus == ReportStatus.OPEN) {
             throw new ValidationException("Un reporte se resuelve como RESOLVED o DISMISSED");
         }
@@ -111,15 +112,6 @@ public class ModerationService {
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
-
-    private User requireModerator(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-        if (user.getGlobalRole() != GlobalRole.MODERATOR) {
-            throw new ForbiddenException("Requiere rol de moderador global");
-        }
-        return user;
-    }
 
     private ReportResponse toResponse(Report r) {
         return new ReportResponse(

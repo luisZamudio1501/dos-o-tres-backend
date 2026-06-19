@@ -8,7 +8,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
+import com.dosotres.moderation.ModerationAccess;
 import com.dosotres.publicwall.dto.CreatePublicRequestRequest;
 import com.dosotres.publicwall.dto.PublicRequestResponse;
 import com.dosotres.user.User;
@@ -33,12 +35,14 @@ class PublicWallServiceTest {
     private PublicPrayerRepository prayerRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private ModerationAccess moderationAccess;
 
     private PublicWallService service;
 
     @BeforeEach
     void setUp() {
-        service = new PublicWallService(requestRepository, prayerRepository, userRepository);
+        service = new PublicWallService(requestRepository, prayerRepository, userRepository, moderationAccess);
     }
 
     private User makeUser(Long id, String name, String country) {
@@ -149,5 +153,63 @@ class PublicWallServiceTest {
         assertThatThrownBy(() -> service.pray(1L, 10L))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(prayerRepository, never()).save(any(PublicPrayer.class));
+    }
+
+    @Test
+    void setVisibility_byModerator_hidesRequest() {
+        User author = makeUser(2L, "Ana", "UY");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(prayerRepository.existsByRequestIdAndUserId(10L, 5L)).thenReturn(false);
+
+        service.setVisibility(5L, 10L, ModerationStatus.HIDDEN);
+
+        assertThat(r.getModerationStatus()).isEqualTo(ModerationStatus.HIDDEN);
+    }
+
+    @Test
+    void setVisibility_byNonModerator_throwsForbidden() {
+        when(moderationAccess.requireModerator(3L)).thenThrow(new ForbiddenException("no mod"));
+
+        assertThatThrownBy(() -> service.setVisibility(3L, 10L, ModerationStatus.HIDDEN))
+                .isInstanceOf(ForbiddenException.class);
+        verify(requestRepository, never()).findById(any());
+    }
+
+    @Test
+    void delete_byAuthor_removes() {
+        User author = makeUser(2L, "Ana", "UY");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+
+        service.delete(2L, 10L);
+
+        verify(prayerRepository).deleteByRequestId(10L);
+        verify(requestRepository).delete(r);
+    }
+
+    @Test
+    void delete_byModerator_removes() {
+        User author = makeUser(2L, "Ana", "UY");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(moderationAccess.isModerator(5L)).thenReturn(true);
+
+        service.delete(5L, 10L);
+
+        verify(prayerRepository).deleteByRequestId(10L);
+        verify(requestRepository).delete(r);
+    }
+
+    @Test
+    void delete_byOtherNonModerator_throwsForbidden() {
+        User author = makeUser(2L, "Ana", "UY");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(moderationAccess.isModerator(3L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.delete(3L, 10L))
+                .isInstanceOf(ForbiddenException.class);
+        verify(requestRepository, never()).delete(any(PublicPrayerRequest.class));
     }
 }

@@ -2,13 +2,16 @@ package com.dosotres.publicwall;
 
 import com.dosotres.publicwall.dto.CreatePublicRequestRequest;
 import com.dosotres.publicwall.dto.PublicRequestResponse;
+import com.dosotres.publicwall.dto.UpdateVisibilityRequest;
 import com.dosotres.security.annotations.AuthUser;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -42,5 +45,20 @@ public class PublicWallController {
     @PostMapping("/{id}/pray")
     public PublicRequestResponse pray(@AuthUser Long userId, @PathVariable Long id) {
         return publicWallService.pray(userId, id);
+    }
+
+    /** Moderador global: ocultar/restaurar un pedido del muro. */
+    @PatchMapping("/{id}/visibility")
+    public PublicRequestResponse setVisibility(@AuthUser Long userId,
+                                               @PathVariable Long id,
+                                               @Valid @RequestBody UpdateVisibilityRequest req) {
+        return publicWallService.setVisibility(userId, id, req.moderationStatus());
+    }
+
+    /** Borrar un pedido público: autor o moderador global. */
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@AuthUser Long userId, @PathVariable Long id) {
+        publicWallService.delete(userId, id);
     }
 }

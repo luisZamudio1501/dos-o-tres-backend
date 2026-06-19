@@ -1,6 +1,8 @@
 package com.dosotres.publicwall;
 
+import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
+import com.dosotres.moderation.ModerationAccess;
 import com.dosotres.publicwall.dto.CreatePublicRequestRequest;
 import com.dosotres.publicwall.dto.PublicRequestResponse;
 import com.dosotres.user.User;
@@ -20,13 +22,16 @@ public class PublicWallService {
     private final PublicPrayerRequestRepository requestRepository;
     private final PublicPrayerRepository prayerRepository;
     private final UserRepository userRepository;
+    private final ModerationAccess moderationAccess;
 
     public PublicWallService(PublicPrayerRequestRepository requestRepository,
                              PublicPrayerRepository prayerRepository,
-                             UserRepository userRepository) {
+                             UserRepository userRepository,
+                             ModerationAccess moderationAccess) {
         this.requestRepository = requestRepository;
         this.prayerRepository = prayerRepository;
         this.userRepository = userRepository;
+        this.moderationAccess = moderationAccess;
     }
 
     /** Publica un pedido en el muro público. */
@@ -80,6 +85,28 @@ public class PublicWallService {
         }
 
         return toResponse(request, userId, true);
+    }
+
+    /** Moderador global: oculta (HIDDEN) o restaura (VISIBLE) un pedido del muro. */
+    public PublicRequestResponse setVisibility(Long moderatorId, Long requestId, ModerationStatus status) {
+        moderationAccess.requireModerator(moderatorId);
+        PublicPrayerRequest request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("PublicPrayerRequest", "id", requestId));
+        request.setModerationStatus(status);
+        boolean iPrayed = prayerRepository.existsByRequestIdAndUserId(requestId, moderatorId);
+        return toResponse(request, moderatorId, iPrayed);
+    }
+
+    /** Borra un pedido público: lo puede borrar su autor o un moderador global. */
+    public void delete(Long userId, Long requestId) {
+        PublicPrayerRequest request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("PublicPrayerRequest", "id", requestId));
+        boolean isAuthor = request.getAuthor().getId().equals(userId);
+        if (!isAuthor && !moderationAccess.isModerator(userId)) {
+            throw new ForbiddenException("Solo el autor o un moderador puede borrar este pedido público");
+        }
+        prayerRepository.deleteByRequestId(requestId);
+        requestRepository.delete(request);
     }
 
     private String normalize(String value) {

@@ -9,6 +9,8 @@ public interface PublicPrayerRepository extends JpaRepository<PublicPrayer, Long
 
     boolean existsByRequestIdAndUserId(Long requestId, Long userId);
 
+    void deleteByRequestId(Long requestId);
+
     /** IDs de pedidos (entre los dados) por los que el usuario ya oró — evita N+1 en el feed. */
     @Query("select p.request.id from PublicPrayer p "
             + "where p.user.id = :userId and p.request.id in :requestIds")
