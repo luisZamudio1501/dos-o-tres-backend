@@ -98,6 +98,14 @@
             <artifactId>web-push</artifactId>
             <version>5.1.1</version>
         </dependency>
+        <!-- web-push solo declara esta dependencia en metadata de Gradle, no en su
+             POM de Maven, así que nunca se empaquetaba en el JAR (NoClassDefFoundError
+             en runtime al enviar cualquier push). Hay que declararla a mano. -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.78.1</version>
+        </dependency>
 
         <!-- Dev -->
         <dependency>
