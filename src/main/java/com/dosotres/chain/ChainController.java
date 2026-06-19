@@ -61,4 +61,12 @@ public class ChainController {
                                            @AuthUser Long userId) {
         return chainService.unsubscribe(id, slotIndex, groupId, userId);
     }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id,
+                       @CurrentGroupId Long groupId,
+                       @AuthUser Long userId) {
+        chainService.delete(id, groupId, userId);
+    }
 }

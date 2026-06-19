@@ -165,6 +165,19 @@ public class ChainService {
         return detail(chainId, groupId);
     }
 
+    public void delete(Long chainId, Long groupId, Long userId) {
+        PrayerChain chain = findInGroup(chainId, groupId);
+        boolean isCreator = chain.getCreatedBy().getId().equals(userId);
+        boolean isAdmin = groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
+                .map(m -> m.getRole() == GroupRole.ADMIN)
+                .orElse(false);
+        if (!isCreator && !isAdmin) {
+            throw new ForbiddenException("Only the chain creator or a group admin can delete this chain");
+        }
+        commitmentRepository.deleteByChainId(chainId);
+        chainRepository.delete(chain);
+    }
+
     private PrayerChain findInGroup(Long chainId, Long groupId) {
         PrayerChain chain = chainRepository.findById(chainId)
                 .orElseThrow(() -> new ResourceNotFoundException("PrayerChain", "id", chainId));
@@ -208,6 +221,7 @@ public class ChainService {
                 status(chain),
                 chain.totalSlots(),
                 coveredSlots,
+                chain.getCreatedBy().getId(),
                 chain.getCreatedBy().getDisplayName()
         );
     }

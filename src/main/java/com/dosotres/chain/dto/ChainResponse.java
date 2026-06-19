@@ -12,5 +12,6 @@ public record ChainResponse(
         String status,
         int totalSlots,
         int coveredSlots,
+        Long createdById,
         String createdByName
 ) {}

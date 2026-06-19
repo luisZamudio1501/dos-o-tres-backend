@@ -16,6 +16,7 @@ import com.dosotres.chain.dto.ChainDetailResponse;
 import com.dosotres.chain.dto.ChainResponse;
 import com.dosotres.chain.dto.CreateChainRequest;
 import com.dosotres.common.exception.ForbiddenException;
+import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.common.exception.ValidationException;
 import com.dosotres.group.Group;
 import com.dosotres.group.GroupMember;
@@ -251,5 +252,68 @@ class ChainServiceTest {
 
         assertThatThrownBy(() -> service.subscribe(100L, 99, 10L, 2L))
                 .isInstanceOf(ValidationException.class);
+    }
+
+    @Test
+    void delete_byCreator_removesCommitmentsAndChain() {
+        User creator = makeUser(1L, "Luis");
+        Group group = makeGroup(10L);
+        PrayerChain chain = makeChain(100L, group, creator);
+
+        when(chainRepository.findById(100L)).thenReturn(Optional.of(chain));
+
+        service.delete(100L, 10L, 1L);
+
+        verify(commitmentRepository).deleteByChainId(100L);
+        verify(chainRepository).delete(chain);
+    }
+
+    @Test
+    void delete_byAdminWhoIsNotCreator_removesChain() {
+        User creator = makeUser(1L, "Luis");
+        User admin = makeUser(3L, "Pedro");
+        Group group = makeGroup(10L);
+        PrayerChain chain = makeChain(100L, group, creator);
+
+        when(chainRepository.findById(100L)).thenReturn(Optional.of(chain));
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 3L))
+                .thenReturn(Optional.of(makeMember(group, admin, GroupRole.ADMIN)));
+
+        service.delete(100L, 10L, 3L);
+
+        verify(commitmentRepository).deleteByChainId(100L);
+        verify(chainRepository).delete(chain);
+    }
+
+    @Test
+    void delete_byMemberWhoIsNotCreator_throwsForbidden() {
+        User creator = makeUser(1L, "Luis");
+        User member = makeUser(2L, "Ana");
+        Group group = makeGroup(10L);
+        PrayerChain chain = makeChain(100L, group, creator);
+
+        when(chainRepository.findById(100L)).thenReturn(Optional.of(chain));
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 2L))
+                .thenReturn(Optional.of(makeMember(group, member, GroupRole.MEMBER)));
+
+        assertThatThrownBy(() -> service.delete(100L, 10L, 2L))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(commitmentRepository, never()).deleteByChainId(any());
+        verify(chainRepository, never()).delete(any(PrayerChain.class));
+    }
+
+    @Test
+    void delete_chainFromAnotherGroup_throwsNotFound() {
+        User creator = makeUser(1L, "Luis");
+        Group group = makeGroup(10L);
+        PrayerChain chain = makeChain(100L, group, creator);
+
+        when(chainRepository.findById(100L)).thenReturn(Optional.of(chain));
+
+        assertThatThrownBy(() -> service.delete(100L, 11L, 1L))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(chainRepository, never()).delete(any(PrayerChain.class));
     }
 }
