@@ -1,13 +1,21 @@
 package com.dosotres.messaging;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ValidationException;
 import com.dosotres.group.GroupMemberRepository;
 import com.dosotres.moderation.UserBlockRepository;
+import com.dosotres.user.User;
+import com.dosotres.user.UserRepository;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,12 +29,26 @@ class MessagingPolicyTest {
     private GroupMemberRepository groupMemberRepository;
     @Mock
     private UserBlockRepository userBlockRepository;
+    @Mock
+    private UserRepository userRepository;
+    @Mock
+    private ConversationRepository conversationRepository;
+
+    private final Clock clock = Clock.fixed(Instant.parse("2026-06-20T12:00:00Z"), ZoneOffset.UTC);
 
     private MessagingPolicy policy;
 
     @BeforeEach
     void setUp() {
-        policy = new MessagingPolicy(groupMemberRepository, userBlockRepository);
+        policy = new MessagingPolicy(groupMemberRepository, userBlockRepository, userRepository,
+                conversationRepository, clock);
+    }
+
+    private User strangerWithOptIn(boolean optIn) {
+        User user = new User();
+        user.setId(2L);
+        user.setAllowStrangerMessages(optIn);
+        return user;
     }
 
     @Test
@@ -44,19 +66,43 @@ class MessagingPolicyTest {
     }
 
     @Test
-    void assertCanInitiate_noSharedGroup_throwsForbidden() {
+    void assertCanInitiate_sharedGroupNoBlock_returnsAccepted() {
+        when(userBlockRepository.existsBlockBetween(1L, 2L)).thenReturn(false);
+        when(groupMemberRepository.existsSharedGroup(1L, 2L)).thenReturn(true);
+
+        assertThat(policy.assertCanInitiate(1L, 2L)).isEqualTo(ConversationState.ACCEPTED);
+    }
+
+    @Test
+    void assertCanInitiate_strangerWithoutOptIn_throwsForbidden() {
         when(userBlockRepository.existsBlockBetween(1L, 2L)).thenReturn(false);
         when(groupMemberRepository.existsSharedGroup(1L, 2L)).thenReturn(false);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(strangerWithOptIn(false)));
 
         assertThatThrownBy(() -> policy.assertCanInitiate(1L, 2L))
                 .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
-    void assertCanInitiate_sharedGroupNoBlock_passes() {
+    void assertCanInitiate_strangerWithOptIn_returnsPending() {
         when(userBlockRepository.existsBlockBetween(1L, 2L)).thenReturn(false);
-        when(groupMemberRepository.existsSharedGroup(1L, 2L)).thenReturn(true);
+        when(groupMemberRepository.existsSharedGroup(1L, 2L)).thenReturn(false);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(strangerWithOptIn(true)));
+        when(conversationRepository.countByInitiatedByIdAndStateAndCreatedAtAfter(
+                eq(1L), eq(ConversationState.PENDING), any())).thenReturn(0L);
 
-        assertThatCode(() -> policy.assertCanInitiate(1L, 2L)).doesNotThrowAnyException();
+        assertThat(policy.assertCanInitiate(1L, 2L)).isEqualTo(ConversationState.PENDING);
+    }
+
+    @Test
+    void assertCanInitiate_strangerOverRateLimit_throwsForbidden() {
+        when(userBlockRepository.existsBlockBetween(1L, 2L)).thenReturn(false);
+        when(groupMemberRepository.existsSharedGroup(1L, 2L)).thenReturn(false);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(strangerWithOptIn(true)));
+        when(conversationRepository.countByInitiatedByIdAndStateAndCreatedAtAfter(
+                eq(1L), eq(ConversationState.PENDING), any())).thenReturn(10L);
+
+        assertThatThrownBy(() -> policy.assertCanInitiate(1L, 2L))
+                .isInstanceOf(ForbiddenException.class);
     }
 }

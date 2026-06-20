@@ -52,9 +52,9 @@ public class MessagingService {
         this.clock = clock;
     }
 
-    /** Crea o recupera la conversación 1:1 con otro usuario (Fase A). */
+    /** Crea o recupera la conversación 1:1 con otro usuario (Fase A/4). */
     public ConversationSummaryResponse startConversation(Long userId, Long otherUserId) {
-        messagingPolicy.assertCanInitiate(userId, otherUserId);
+        ConversationState initialState = messagingPolicy.assertCanInitiate(userId, otherUserId);
 
         List<Long> existing = conversationRepository.findConversationIdsBetween(userId, otherUserId);
         if (!existing.isEmpty()) {
@@ -69,7 +69,7 @@ public class MessagingService {
         User other = findUser(otherUserId);
 
         Conversation conversation = new Conversation();
-        conversation.setState(ConversationState.ACCEPTED);
+        conversation.setState(initialState);
         conversation.setInitiatedBy(initiator);
         conversationRepository.save(conversation);
 
@@ -78,6 +78,31 @@ public class MessagingService {
         participantRepository.save(participant(conversation, other));
 
         return toSummary(myParticipation);
+    }
+
+    /** El receptor acepta una solicitud de desconocido (Fase 4). */
+    public void acceptConversation(Long userId, Long conversationId) {
+        Conversation conversation = requirePendingAsReceiver(userId, conversationId);
+        conversation.setState(ConversationState.ACCEPTED);
+    }
+
+    /** El receptor rechaza una solicitud de desconocido (Fase 4). */
+    public void declineConversation(Long userId, Long conversationId) {
+        Conversation conversation = requirePendingAsReceiver(userId, conversationId);
+        conversation.setState(ConversationState.DECLINED);
+    }
+
+    private Conversation requirePendingAsReceiver(Long userId, Long conversationId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", conversationId));
+        requireParticipant(conversationId, userId);
+        if (conversation.getInitiatedBy().getId().equals(userId)) {
+            throw new ForbiddenException("Quien inició la conversación no puede aceptarla ni rechazarla");
+        }
+        if (conversation.getState() != ConversationState.PENDING) {
+            throw new ForbiddenException("Esta conversación ya fue resuelta");
+        }
+        return conversation;
     }
 
     @Transactional(readOnly = true)
@@ -98,6 +123,14 @@ public class MessagingService {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", conversationId));
         requireParticipant(conversationId, userId);
+
+        if (conversation.getState() == ConversationState.PENDING
+                && !conversation.getInitiatedBy().getId().equals(userId)) {
+            throw new ForbiddenException("Primero debés aceptar la conversación para responder");
+        }
+        if (conversation.getState() == ConversationState.DECLINED) {
+            throw new ForbiddenException("Esta conversación fue rechazada");
+        }
 
         ConversationParticipant other = participantRepository
                 .findFirstByConversationIdAndUserIdNot(conversationId, userId)
@@ -180,7 +213,9 @@ public class MessagingService {
                 other != null ? other.getUser().getDisplayName() : null,
                 last != null ? last.getBody() : null,
                 last != null && last.getCreatedAt() != null ? last.getCreatedAt().toString() : null,
-                unread);
+                unread,
+                c.getState().name(),
+                c.getInitiatedBy().getId().equals(myId));
     }
 
     private MessageResponse toMessageResponse(Message m) {

@@ -6,5 +6,7 @@ public record ConversationSummaryResponse(
         String otherUserName,
         String lastMessage,
         String lastMessageAt,
-        long unreadCount
+        long unreadCount,
+        String state,
+        boolean iAmInitiator
 ) {}

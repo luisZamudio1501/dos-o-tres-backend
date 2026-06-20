@@ -60,4 +60,16 @@ public class MessagingController {
     public void markRead(@AuthUser Long userId, @PathVariable Long id) {
         messagingService.markRead(userId, id);
     }
+
+    @PostMapping("/{id}/accept")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void accept(@AuthUser Long userId, @PathVariable Long id) {
+        messagingService.acceptConversation(userId, id);
+    }
+
+    @PostMapping("/{id}/decline")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void decline(@AuthUser Long userId, @PathVariable Long id) {
+        messagingService.declineConversation(userId, id);
+    }
 }

@@ -63,7 +63,8 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                "Luis Z.", "ar", "Santa Fe", "Rosario", "Iglesia Bautista Centro", null, null, null, null, null));
+                "Luis Z.", "ar", "Santa Fe", "Rosario", "Iglesia Bautista Centro", null, null, null, null, null,
+                null));
 
         assertThat(res.displayName()).isEqualTo("Luis Z.");
         assertThat(res.country()).isEqualTo("AR");
@@ -82,7 +83,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, "  ", "", null, null, null, null, null, null));
+                null, null, "  ", "", null, null, null, null, null, null, null));
 
         assertThat(res.country()).isNull();
         assertThat(res.province()).isNull();
@@ -95,7 +96,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, "AR", null, "Rosario", null, null, null, null, null, null));
+                null, "AR", null, "Rosario", null, null, null, null, null, null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis");
         assertThat(res.country()).isEqualTo("AR");
@@ -107,7 +108,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                "  Luis Z.  ", null, null, "  Rosario  ", null, null, null, null, null, null));
+                "  Luis Z.  ", null, null, "  Rosario  ", null, null, null, null, null, null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis Z.");
         assertThat(res.city()).isEqualTo("Rosario");
@@ -129,7 +130,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, null, null, null, null, null, false, null, false));
+                null, null, null, null, null, null, null, false, null, false, null));
 
         assertThat(res.notifyOnRequestCreated()).isFalse();
         assertThat(res.notifyOnPrayed()).isTrue();
@@ -151,7 +152,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, null, null, null, "+54 341 5550000", PhoneVisibility.GROUP, null, null, null));
+                null, null, null, null, null, "+54 341 5550000", PhoneVisibility.GROUP, null, null, null, null));
 
         assertThat(res.phone()).isEqualTo("+54 341 5550000");
         assertThat(res.phoneVisibility()).isEqualTo("GROUP");
@@ -164,8 +165,27 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, null, null, null, "  ", null, null, null, null));
+                null, null, null, null, null, "  ", null, null, null, null, null));
 
         assertThat(res.phone()).isNull();
+    }
+
+    @Test
+    void getProfile_allowStrangerMessages_defaultsToFalse() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
+
+        UserProfileResponse res = userService.getProfile(1L);
+
+        assertThat(res.allowStrangerMessages()).isFalse();
+    }
+
+    @Test
+    void updateProfile_setsAllowStrangerMessages() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
+
+        UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
+                null, null, null, null, null, null, null, null, null, null, true));
+
+        assertThat(res.allowStrangerMessages()).isTrue();
     }
 }

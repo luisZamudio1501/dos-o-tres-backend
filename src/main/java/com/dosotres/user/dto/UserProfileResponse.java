@@ -13,5 +13,6 @@ public record UserProfileResponse(
         String globalRole,
         boolean notifyOnRequestCreated,
         boolean notifyOnPrayed,
-        boolean notifyOnAnswered
+        boolean notifyOnAnswered,
+        boolean allowStrangerMessages
 ) {}

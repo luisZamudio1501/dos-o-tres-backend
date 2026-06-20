@@ -80,6 +80,10 @@ public class User {
     @Column(name = "notify_on_answered", nullable = false)
     private boolean notifyOnAnswered = true;
 
+    // Opt-in para recibir mensajes de desconocidos (Fase 4, ADR-008). Default OFF.
+    @Column(name = "allow_stranger_messages", nullable = false)
+    private boolean allowStrangerMessages = false;
+
     // Rol global de comunidad (ADR-006). Default USER; MODERATOR gestiona reportes.
     @Enumerated(EnumType.STRING)
     @Column(name = "global_role", nullable = false, length = 20)
@@ -245,6 +249,14 @@ public class User {
 
     public void setPhoneVisibility(PhoneVisibility phoneVisibility) {
         this.phoneVisibility = phoneVisibility;
+    }
+
+    public boolean isAllowStrangerMessages() {
+        return allowStrangerMessages;
+    }
+
+    public void setAllowStrangerMessages(boolean allowStrangerMessages) {
+        this.allowStrangerMessages = allowStrangerMessages;
     }
 
     public GlobalRole getGlobalRole() {

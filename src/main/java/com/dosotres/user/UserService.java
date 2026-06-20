@@ -49,6 +49,9 @@ public class UserService {
         if (req.notifyOnAnswered() != null) {
             user.setNotifyOnAnswered(req.notifyOnAnswered());
         }
+        if (req.allowStrangerMessages() != null) {
+            user.setAllowStrangerMessages(req.allowStrangerMessages());
+        }
 
         userRepository.save(user);
         return toResponse(user);
@@ -85,7 +88,8 @@ public class UserService {
                 user.getGlobalRole().name(),
                 user.isNotifyOnRequestCreated(),
                 user.isNotifyOnPrayed(),
-                user.isNotifyOnAnswered()
+                user.isNotifyOnAnswered(),
+                user.isAllowStrangerMessages()
         );
     }
 }

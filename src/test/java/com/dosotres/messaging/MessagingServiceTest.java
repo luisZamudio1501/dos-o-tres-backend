@@ -75,6 +75,7 @@ class MessagingServiceTest {
     void startConversation_new_createsConversationAndTwoParticipants() {
         User u1 = makeUser(1L, "Luis");
         User u2 = makeUser(2L, "Ana");
+        when(messagingPolicy.assertCanInitiate(1L, 2L)).thenReturn(ConversationState.ACCEPTED);
         when(conversationRepository.findConversationIdsBetween(1L, 2L)).thenReturn(List.of());
         when(userRepository.findById(1L)).thenReturn(Optional.of(u1));
         when(userRepository.findById(2L)).thenReturn(Optional.of(u2));
@@ -102,6 +103,7 @@ class MessagingServiceTest {
         User u1 = makeUser(1L, "Luis");
         User u2 = makeUser(2L, "Ana");
         Conversation c = makeConversation(100L);
+        c.setInitiatedBy(u1);
         when(conversationRepository.findConversationIdsBetween(1L, 2L)).thenReturn(List.of(100L));
         when(participantRepository.findByConversationIdAndUserId(100L, 1L))
                 .thenReturn(Optional.of(makeParticipant(c, u1)));
@@ -179,5 +181,79 @@ class MessagingServiceTest {
         service.markRead(1L, 100L);
 
         assertThat(me.getLastReadAt()).isEqualTo(FIXED_CLOCK.instant());
+    }
+
+    private Conversation makePendingConversation(Long id, User initiatedBy) {
+        Conversation c = new Conversation();
+        c.setId(id);
+        c.setState(ConversationState.PENDING);
+        c.setInitiatedBy(initiatedBy);
+        return c;
+    }
+
+    @Test
+    void sendMessage_pendingAndReceiverTries_throwsForbidden() {
+        User initiator = makeUser(1L, "Luis");
+        User receiver = makeUser(2L, "Ana");
+        Conversation c = makePendingConversation(100L, initiator);
+        when(conversationRepository.findById(100L)).thenReturn(Optional.of(c));
+        when(participantRepository.existsByConversationIdAndUserId(100L, 2L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.sendMessage(2L, 100L, "Hola"))
+                .isInstanceOf(ForbiddenException.class);
+        verify(messageRepository, never()).save(any(Message.class));
+    }
+
+    @Test
+    void sendMessage_pendingAndInitiatorSends_allowed() {
+        User initiator = makeUser(1L, "Luis");
+        User receiver = makeUser(2L, "Ana");
+        Conversation c = makePendingConversation(100L, initiator);
+        when(conversationRepository.findById(100L)).thenReturn(Optional.of(c));
+        when(participantRepository.existsByConversationIdAndUserId(100L, 1L)).thenReturn(true);
+        when(participantRepository.findFirstByConversationIdAndUserIdNot(100L, 1L))
+                .thenReturn(Optional.of(makeParticipant(c, receiver)));
+        when(messagingPolicy.isBlockedBetween(1L, 2L)).thenReturn(false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(initiator));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MessageResponse res = service.sendMessage(1L, 100L, "Hola Ana");
+
+        assertThat(res.body()).isEqualTo("Hola Ana");
+    }
+
+    @Test
+    void acceptConversation_byReceiver_setsAccepted() {
+        User initiator = makeUser(1L, "Luis");
+        Conversation c = makePendingConversation(100L, initiator);
+        when(conversationRepository.findById(100L)).thenReturn(Optional.of(c));
+        when(participantRepository.existsByConversationIdAndUserId(100L, 2L)).thenReturn(true);
+
+        service.acceptConversation(2L, 100L);
+
+        assertThat(c.getState()).isEqualTo(ConversationState.ACCEPTED);
+    }
+
+    @Test
+    void acceptConversation_byInitiator_throwsForbidden() {
+        User initiator = makeUser(1L, "Luis");
+        Conversation c = makePendingConversation(100L, initiator);
+        when(conversationRepository.findById(100L)).thenReturn(Optional.of(c));
+        when(participantRepository.existsByConversationIdAndUserId(100L, 1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.acceptConversation(1L, 100L))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void declineConversation_byReceiver_setsDeclined() {
+        User initiator = makeUser(1L, "Luis");
+        Conversation c = makePendingConversation(100L, initiator);
+        when(conversationRepository.findById(100L)).thenReturn(Optional.of(c));
+        when(participantRepository.existsByConversationIdAndUserId(100L, 2L)).thenReturn(true);
+
+        service.declineConversation(2L, 100L);
+
+        assertThat(c.getState()).isEqualTo(ConversationState.DECLINED);
     }
 }

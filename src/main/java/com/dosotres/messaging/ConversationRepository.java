@@ -1,5 +1,6 @@
 package com.dosotres.messaging;
 
+import java.time.Instant;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -12,4 +13,7 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
             + "WHERE p1.conversation.id = p2.conversation.id "
             + "AND p1.user.id = :a AND p2.user.id = :b")
     List<Long> findConversationIdsBetween(@Param("a") Long a, @Param("b") Long b);
+
+    /** Rate limit de solicitudes nuevas a desconocidos (Fase 4). */
+    long countByInitiatedByIdAndStateAndCreatedAtAfter(Long initiatedById, ConversationState state, Instant after);
 }

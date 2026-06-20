@@ -20,5 +20,6 @@ public record UpdateProfileRequest(
         PhoneVisibility phoneVisibility,
         Boolean notifyOnRequestCreated,
         Boolean notifyOnPrayed,
-        Boolean notifyOnAnswered
+        Boolean notifyOnAnswered,
+        Boolean allowStrangerMessages
 ) {}
