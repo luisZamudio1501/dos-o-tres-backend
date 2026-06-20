@@ -6,5 +6,6 @@ public record GroupMemberResponse(
         String role,
         String joinedAt,
         String city,
-        String country
+        String country,
+        String phone
 ) {}

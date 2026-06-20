@@ -12,6 +12,7 @@ import com.dosotres.group.dto.GroupResponse;
 import com.dosotres.group.dto.UpdateGroupRequest;
 import com.dosotres.prayer.PrayerCommitment;
 import com.dosotres.prayer.PrayerCommitmentRepository;
+import com.dosotres.user.PhoneVisibility;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.util.List;
@@ -239,15 +240,19 @@ public class GroupService {
     /**
      * Ciudad/país del perfil (S5): visibles solo aquí, dentro de un grupo del
      * que el solicitante ya es miembro (regla de privacidad — dato sensible).
+     * Teléfono (M.1): solo si el dueño eligió visibilidad GROUP.
      */
     private GroupMemberResponse toMemberResponse(GroupMember m) {
+        User user = m.getUser();
+        String phone = user.getPhoneVisibility() == PhoneVisibility.GROUP ? user.getPhone() : null;
         return new GroupMemberResponse(
-                m.getUser().getId(),
-                m.getUser().getDisplayName(),
+                user.getId(),
+                user.getDisplayName(),
                 m.getRole().name(),
                 m.getJoinedAt().toString(),
-                m.getUser().getCity(),
-                m.getUser().getCountry()
+                user.getCity(),
+                user.getCountry(),
+                phone
         );
     }
 

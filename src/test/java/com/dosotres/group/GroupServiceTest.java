@@ -258,4 +258,32 @@ class GroupServiceTest {
         assertThatThrownBy(() -> groupService.getMembers(10L, 99L))
                 .isInstanceOf(ForbiddenException.class);
     }
+
+    @Test
+    void getMembers_exposesPhoneOnlyWhenVisibilityIsGroup() {
+        Group group = makeGroup(10L, "Prayer Group");
+        User me = makeUser(1L, "Luis");
+        User groupVisible = makeUser(2L, "Ana");
+        groupVisible.setPhone("+54 341 5550000");
+        groupVisible.setPhoneVisibility(com.dosotres.user.PhoneVisibility.GROUP);
+        User privatePhone = makeUser(3L, "Marcos");
+        privatePhone.setPhone("+54 341 5551111");
+
+        GroupMember meMember = makeMember(group, me, GroupRole.MEMBER);
+        GroupMember groupVisibleMember = makeMember(group, groupVisible, GroupRole.MEMBER);
+        GroupMember privateMember = makeMember(group, privatePhone, GroupRole.MEMBER);
+
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 1L)).thenReturn(Optional.of(meMember));
+        when(groupMemberRepository.findByGroupId(10L))
+                .thenReturn(List.of(meMember, groupVisibleMember, privateMember));
+
+        List<GroupMemberResponse> members = groupService.getMembers(10L, 1L);
+
+        assertThat(members).filteredOn(m -> m.userId().equals(2L))
+                .extracting(GroupMemberResponse::phone)
+                .containsExactly("+54 341 5550000");
+        assertThat(members).filteredOn(m -> m.userId().equals(3L))
+                .extracting(GroupMemberResponse::phone)
+                .containsExactly((String) null);
+    }
 }
