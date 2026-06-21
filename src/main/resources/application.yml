@@ -45,3 +45,6 @@ app:
   reengagement:
     stale-days: 3
     cron: "0 0 9 * * *"
+  public-wall:
+    archive:
+      cron: "0 30 3 * * *"

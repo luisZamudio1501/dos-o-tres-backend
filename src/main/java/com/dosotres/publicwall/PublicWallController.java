@@ -1,6 +1,7 @@
 package com.dosotres.publicwall;
 
 import com.dosotres.publicwall.dto.CreatePublicRequestRequest;
+import com.dosotres.publicwall.dto.MarkAnsweredRequest;
 import com.dosotres.publicwall.dto.PublicRequestResponse;
 import com.dosotres.publicwall.dto.UpdateVisibilityRequest;
 import com.dosotres.security.annotations.AuthUser;
@@ -42,9 +43,24 @@ public class PublicWallController {
         return publicWallService.feed(userId, pageable);
     }
 
+    /** Testimonios públicos permanentes (respondidos con testimonio). */
+    @GetMapping("/testimonies")
+    public Page<PublicRequestResponse> testimonies(@AuthUser Long userId,
+                                                   @PageableDefault(size = 20) Pageable pageable) {
+        return publicWallService.testimonies(userId, pageable);
+    }
+
     @PostMapping("/{id}/pray")
     public PublicRequestResponse pray(@AuthUser Long userId, @PathVariable Long id) {
         return publicWallService.pray(userId, id);
+    }
+
+    /** El autor marca su pedido como respondido, con testimonio opcional. */
+    @PatchMapping("/{id}/answered")
+    public PublicRequestResponse markAnswered(@AuthUser Long userId,
+                                              @PathVariable Long id,
+                                              @Valid @RequestBody MarkAnsweredRequest req) {
+        return publicWallService.markAnswered(userId, id, req.testimony());
     }
 
     /** Moderador global: ocultar/restaurar un pedido del muro. */

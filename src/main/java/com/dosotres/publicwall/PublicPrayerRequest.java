@@ -33,6 +33,9 @@ public class PublicPrayerRequest {
     @Column(columnDefinition = "TEXT")
     private String body;
 
+    @Column(columnDefinition = "TEXT")
+    private String testimony;
+
     @Column(name = "is_anonymous", nullable = false)
     private boolean anonymous = false;
 
@@ -50,12 +53,19 @@ public class PublicPrayerRequest {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "last_activity_at")
+    private Instant lastActivityAt;
+
     @Column(name = "answered_at")
     private Instant answeredAt;
+
+    @Column(name = "archived_at")
+    private Instant archivedAt;
 
     @PrePersist
     void onCreate() {
         this.createdAt = Instant.now();
+        this.lastActivityAt = this.createdAt;
     }
 
     public Long getId() { return id; }
@@ -69,6 +79,9 @@ public class PublicPrayerRequest {
 
     public String getBody() { return body; }
     public void setBody(String body) { this.body = body; }
+
+    public String getTestimony() { return testimony; }
+    public void setTestimony(String testimony) { this.testimony = testimony; }
 
     public boolean isAnonymous() { return anonymous; }
     public void setAnonymous(boolean anonymous) { this.anonymous = anonymous; }
@@ -85,6 +98,12 @@ public class PublicPrayerRequest {
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 
+    public Instant getLastActivityAt() { return lastActivityAt; }
+    public void setLastActivityAt(Instant lastActivityAt) { this.lastActivityAt = lastActivityAt; }
+
     public Instant getAnsweredAt() { return answeredAt; }
     public void setAnsweredAt(Instant answeredAt) { this.answeredAt = answeredAt; }
+
+    public Instant getArchivedAt() { return archivedAt; }
+    public void setArchivedAt(Instant archivedAt) { this.archivedAt = archivedAt; }
 }

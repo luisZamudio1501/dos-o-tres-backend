@@ -1,5 +1,6 @@
 package com.dosotres.publicwall;
 
+import com.dosotres.common.exception.ConflictException;
 import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.moderation.ModerationAccess;
@@ -7,6 +8,9 @@ import com.dosotres.publicwall.dto.CreatePublicRequestRequest;
 import com.dosotres.publicwall.dto.PublicRequestResponse;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -19,19 +23,25 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class PublicWallService {
 
+    /** Inactividad tras la cual un pedido activo se auto-archiva. */
+    static final Duration STALE_THRESHOLD = Duration.ofDays(90);
+
     private final PublicPrayerRequestRepository requestRepository;
     private final PublicPrayerRepository prayerRepository;
     private final UserRepository userRepository;
     private final ModerationAccess moderationAccess;
+    private final Clock clock;
 
     public PublicWallService(PublicPrayerRequestRepository requestRepository,
                              PublicPrayerRepository prayerRepository,
                              UserRepository userRepository,
-                             ModerationAccess moderationAccess) {
+                             ModerationAccess moderationAccess,
+                             Clock clock) {
         this.requestRepository = requestRepository;
         this.prayerRepository = prayerRepository;
         this.userRepository = userRepository;
         this.moderationAccess = moderationAccess;
+        this.clock = clock;
     }
 
     /** Publica un pedido en el muro público. */
@@ -52,21 +62,24 @@ public class PublicWallService {
         return toResponse(request, userId, false);
     }
 
-    /** Feed público (solo visible), con flag iPrayed por pedido sin N+1. */
+    /** Feed activo (visible, activo, no archivado), con flag iPrayed por pedido sin N+1. */
     @Transactional(readOnly = true)
     public Page<PublicRequestResponse> feed(Long userId, Pageable pageable) {
         Page<PublicPrayerRequest> page = requestRepository
-                .findByModerationStatusOrderByCreatedAtDesc(ModerationStatus.VISIBLE, pageable);
-
-        List<Long> ids = page.getContent().stream().map(PublicPrayerRequest::getId).toList();
-        Set<Long> prayedIds = ids.isEmpty()
-                ? Set.of()
-                : new HashSet<>(prayerRepository.findPrayedRequestIds(userId, ids));
-
-        return page.map(r -> toResponse(r, userId, prayedIds.contains(r.getId())));
+                .findByModerationStatusAndStatusAndArchivedAtIsNullOrderByCreatedAtDesc(
+                        ModerationStatus.VISIBLE, PublicRequestStatus.ACTIVE, pageable);
+        return mapWithPrayed(page, userId);
     }
 
-    /** "Oré por esto": idempotente, suma al contador una sola vez por usuario. */
+    /** Testimonios públicos permanentes (respondidos con testimonio). */
+    @Transactional(readOnly = true)
+    public Page<PublicRequestResponse> testimonies(Long userId, Pageable pageable) {
+        Page<PublicPrayerRequest> page = requestRepository
+                .findTestimonies(ModerationStatus.VISIBLE, pageable);
+        return mapWithPrayed(page, userId);
+    }
+
+    /** "Oré por esto": idempotente, suma al contador y refresca la actividad una sola vez por usuario. */
     public PublicRequestResponse pray(Long userId, Long requestId) {
         PublicPrayerRequest request = requestRepository.findById(requestId)
                 .filter(r -> r.getModerationStatus() == ModerationStatus.VISIBLE)
@@ -82,9 +95,31 @@ public class PublicWallService {
             prayerRepository.save(prayer);
 
             request.setPrayCount(request.getPrayCount() + 1);
+            request.setLastActivityAt(Instant.now(clock));
         }
 
         return toResponse(request, userId, true);
+    }
+
+    /** El autor (aun anónimo) marca el pedido como respondido, con testimonio opcional. */
+    public PublicRequestResponse markAnswered(Long userId, Long requestId, String testimony) {
+        PublicPrayerRequest request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("PublicPrayerRequest", "id", requestId));
+
+        if (!request.getAuthor().getId().equals(userId)) {
+            throw new ForbiddenException("Solo el autor puede marcar el pedido como respondido");
+        }
+        if (request.getStatus() == PublicRequestStatus.ANSWERED) {
+            throw new ConflictException("El pedido ya está marcado como respondido");
+        }
+
+        String text = normalize(testimony);
+        request.setStatus(PublicRequestStatus.ANSWERED);
+        request.setAnsweredAt(Instant.now(clock));
+        request.setTestimony(text);
+
+        boolean iPrayed = prayerRepository.existsByRequestIdAndUserId(requestId, userId);
+        return toResponse(request, userId, iPrayed);
     }
 
     /** Moderador global: oculta (HIDDEN) o restaura (VISIBLE) un pedido del muro. */
@@ -109,6 +144,20 @@ public class PublicWallService {
         requestRepository.delete(request);
     }
 
+    /** Archiva por inactividad los pedidos activos sin actividad en la ventana. Devuelve cuántos archivó. */
+    public int archiveStale() {
+        Instant now = Instant.now(clock);
+        return requestRepository.archiveStaleActive(now, now.minus(STALE_THRESHOLD));
+    }
+
+    private Page<PublicRequestResponse> mapWithPrayed(Page<PublicPrayerRequest> page, Long userId) {
+        List<Long> ids = page.getContent().stream().map(PublicPrayerRequest::getId).toList();
+        Set<Long> prayedIds = ids.isEmpty()
+                ? Set.of()
+                : new HashSet<>(prayerRepository.findPrayedRequestIds(userId, ids));
+        return page.map(r -> toResponse(r, userId, prayedIds.contains(r.getId())));
+    }
+
     private String normalize(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -127,11 +176,14 @@ public class PublicWallService {
                 anonymous,
                 r.getTitle(),
                 r.getBody(),
+                r.getTestimony(),
                 r.getStatus().name(),
                 r.getPrayCount(),
                 iPrayed,
                 mine,
-                r.getCreatedAt() != null ? r.getCreatedAt().toString() : null
+                r.getArchivedAt() != null,
+                r.getCreatedAt() != null ? r.getCreatedAt().toString() : null,
+                r.getAnsweredAt() != null ? r.getAnsweredAt().toString() : null
         );
     }
 }

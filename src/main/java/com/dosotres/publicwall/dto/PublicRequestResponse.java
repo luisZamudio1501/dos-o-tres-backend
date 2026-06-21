@@ -8,9 +8,12 @@ public record PublicRequestResponse(
         boolean anonymous,
         String title,
         String body,
+        String testimony,     // null salvo respondido con testimonio
         String status,
         int prayCount,
         boolean iPrayed,
         boolean mine,
-        String createdAt
+        boolean archived,
+        String createdAt,
+        String answeredAt     // null salvo respondido
 ) {}
