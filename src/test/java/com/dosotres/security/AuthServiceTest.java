@@ -13,6 +13,7 @@ import com.dosotres.security.dto.LoginRequest;
 import com.dosotres.security.dto.RegisterRequest;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
+import java.time.LocalDate;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,7 @@ class AuthServiceTest {
         when(jwtService.generateToken(anyLong(), anyString())).thenReturn("jwt-token");
 
         AuthResponse response = authService.register(
-                new RegisterRequest("luis@test.com", "Luis", "password123"));
+                new RegisterRequest("luis@test.com", "Luis", "password123", LocalDate.of(1990, 1, 1)));
 
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.email()).isEqualTo("luis@test.com");
@@ -65,7 +66,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("luis@test.com")).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> authService.register(
-                new RegisterRequest("luis@test.com", "Luis", "password123")))
+                new RegisterRequest("luis@test.com", "Luis", "password123", LocalDate.of(1990, 1, 1))))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Ya existe una cuenta");
     }

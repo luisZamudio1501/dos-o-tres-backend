@@ -8,6 +8,8 @@ public record UserProfileResponse(
         String province,
         String city,
         String churchName,
+        String dateOfBirth,
+        boolean isAdult,
         String phone,
         String phoneVisibility,
         String globalRole,

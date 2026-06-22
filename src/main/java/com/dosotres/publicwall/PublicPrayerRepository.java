@@ -9,6 +9,11 @@ public interface PublicPrayerRepository extends JpaRepository<PublicPrayer, Long
 
     boolean existsByRequestIdAndUserId(Long requestId, Long userId);
 
+    boolean existsByRequestIdAndUserIdAndVisibleTrue(Long requestId, Long userId);
+
+    /** Quiénes oraron por un pedido, más reciente primero (para que el autor los vea / agradezca). */
+    List<PublicPrayer> findByRequestIdOrderByPrayedAtDesc(Long requestId);
+
     void deleteByRequestId(Long requestId);
 
     /** IDs de pedidos (entre los dados) por los que el usuario ya oró — evita N+1 en el feed. */

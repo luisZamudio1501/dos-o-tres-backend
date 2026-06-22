@@ -5,6 +5,7 @@ import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.common.exception.ValidationException;
 import com.dosotres.group.GroupMemberRepository;
 import com.dosotres.moderation.UserBlockRepository;
+import com.dosotres.user.AgePolicy;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import java.time.Clock;
@@ -68,6 +69,39 @@ public class MessagingPolicy {
         }
 
         return ConversationState.PENDING;
+    }
+
+    /**
+     * Valida una solicitud de vínculo originada en el muro (Fase 5). A diferencia del
+     * mensaje a desconocido genérico, no exige opt-in del receptor (el contexto es haber
+     * orado por su pedido), pero gatea a que AMBOS sean adultos confirmados (≥18) y aplica
+     * el mismo rate limit diario. Siempre PENDING (la identidad se revela al aceptar).
+     */
+    public void assertCanRequestLink(Long fromUserId, Long toUserId) {
+        if (fromUserId.equals(toUserId)) {
+            throw new ValidationException("No podés solicitar un vínculo con vos mismo");
+        }
+        if (userBlockRepository.existsBlockBetween(fromUserId, toUserId)) {
+            throw new ForbiddenException("No es posible: hay un bloqueo entre ustedes");
+        }
+
+        User from = userRepository.findById(fromUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", fromUserId));
+        User to = userRepository.findById(toUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", toUserId));
+        if (!AgePolicy.isAdult(from.getDateOfBirth(), clock)) {
+            throw new ForbiddenException("Para conectar con personas fuera de tus grupos necesitás declarar tu fecha de nacimiento y ser mayor de 18");
+        }
+        if (!AgePolicy.isAdult(to.getDateOfBirth(), clock)) {
+            throw new ForbiddenException("No es posible conectar con esta persona");
+        }
+
+        Instant cutoff = clock.instant().minus(Duration.ofHours(24));
+        long recentRequests = conversationRepository
+                .countByInitiatedByIdAndStateAndCreatedAtAfter(fromUserId, ConversationState.PENDING, cutoff);
+        if (recentRequests >= MAX_STRANGER_REQUESTS_PER_DAY) {
+            throw new ForbiddenException("Alcanzaste el límite de solicitudes nuevas por hoy");
+        }
     }
 
     public boolean isBlockedBetween(Long a, Long b) {

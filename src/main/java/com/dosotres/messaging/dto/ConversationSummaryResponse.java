@@ -8,5 +8,6 @@ public record ConversationSummaryResponse(
         String lastMessageAt,
         long unreadCount,
         String state,
-        boolean iAmInitiator
+        boolean iAmInitiator,
+        String originTitle   // contexto del pedido del muro; presente en solicitudes de vínculo
 ) {}

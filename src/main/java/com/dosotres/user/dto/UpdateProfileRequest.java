@@ -1,8 +1,10 @@
 package com.dosotres.user.dto;
 
 import com.dosotres.user.PhoneVisibility;
+import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
 
 /**
  * Todos los campos son opcionales: null o string vacío limpian el campo
@@ -16,6 +18,7 @@ public record UpdateProfileRequest(
         @Size(max = 100) String province,
         @Size(max = 100) String city,
         @Size(max = 150) String churchName,
+        @Past LocalDate dateOfBirth,
         @Size(max = 30) String phone,
         PhoneVisibility phoneVisibility,
         Boolean notifyOnRequestCreated,

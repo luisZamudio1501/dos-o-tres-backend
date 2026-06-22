@@ -4,6 +4,7 @@ import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.messaging.dto.ConversationSummaryResponse;
 import com.dosotres.messaging.dto.MessageResponse;
+import com.dosotres.publicwall.PublicPrayerRequest;
 import com.dosotres.push.PushNotificationService;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
@@ -76,6 +77,43 @@ public class MessagingService {
         ConversationParticipant myParticipation = participant(conversation, initiator);
         participantRepository.save(myParticipation);
         participantRepository.save(participant(conversation, other));
+
+        return toSummary(myParticipation);
+    }
+
+    /**
+     * Solicitud de vínculo originada en el muro (Fase 5): el orante pide conectar con el
+     * autor del pedido. Idempotente (una por orante por pedido). Queda PENDING y la
+     * identidad del solicitante se revela sólo cuando el autor acepta.
+     */
+    public ConversationSummaryResponse startLinkRequest(Long initiatorId, Long recipientId,
+                                                        PublicPrayerRequest origin) {
+        messagingPolicy.assertCanRequestLink(initiatorId, recipientId);
+
+        Conversation existing = conversationRepository
+                .findByOriginPublicRequestIdAndInitiatedById(origin.getId(), initiatorId)
+                .orElse(null);
+        if (existing != null) {
+            ConversationParticipant me = participantRepository
+                    .findByConversationIdAndUserId(existing.getId(), initiatorId)
+                    .orElseThrow(() -> new ResourceNotFoundException("ConversationParticipant",
+                            "conversation+user", existing.getId() + "+" + initiatorId));
+            return toSummary(me);
+        }
+
+        User initiator = findUser(initiatorId);
+        User recipient = findUser(recipientId);
+
+        Conversation conversation = new Conversation();
+        conversation.setState(ConversationState.PENDING);
+        conversation.setInitiatedBy(initiator);
+        conversation.setOriginPublicRequest(origin);
+        conversation.setOriginContext(origin.getTitle());
+        conversationRepository.save(conversation);
+
+        ConversationParticipant myParticipation = participant(conversation, initiator);
+        participantRepository.save(myParticipation);
+        participantRepository.save(participant(conversation, recipient));
 
         return toSummary(myParticipation);
     }
@@ -207,15 +245,23 @@ public class MessagingService {
         long unread = messageRepository
                 .countByConversationIdAndCreatedAtAfterAndSenderIdNot(c.getId(), since, myId);
 
+        boolean iAmInitiator = c.getInitiatedBy().getId().equals(myId);
+        // Solicitud de vínculo del muro: hasta que el receptor (autor) acepta, la
+        // identidad del solicitante queda enmascarada; se muestra el contexto del pedido.
+        boolean maskInitiator = c.getOriginPublicRequest() != null
+                && c.getState() == ConversationState.PENDING
+                && !iAmInitiator;
+
         return new ConversationSummaryResponse(
                 c.getId(),
-                other != null ? other.getUser().getId() : null,
-                other != null ? other.getUser().getDisplayName() : null,
+                maskInitiator || other == null ? null : other.getUser().getId(),
+                maskInitiator || other == null ? null : other.getUser().getDisplayName(),
                 last != null ? last.getBody() : null,
                 last != null && last.getCreatedAt() != null ? last.getCreatedAt().toString() : null,
                 unread,
                 c.getState().name(),
-                c.getInitiatedBy().getId().equals(myId));
+                iAmInitiator,
+                c.getOriginContext());
     }
 
     private MessageResponse toMessageResponse(Message m) {

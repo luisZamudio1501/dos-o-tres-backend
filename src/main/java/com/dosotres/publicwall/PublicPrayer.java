@@ -31,6 +31,10 @@ public class PublicPrayer {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    /** Si la oración se muestra con el nombre del orante (true) o como "Anónimo" (false). */
+    @Column(nullable = false)
+    private boolean visible = false;
+
     @Column(name = "prayed_at", nullable = false, updatable = false)
     private Instant prayedAt;
 
@@ -47,6 +51,9 @@ public class PublicPrayer {
 
     public User getUser() { return user; }
     public void setUser(User user) { this.user = user; }
+
+    public boolean isVisible() { return visible; }
+    public void setVisible(boolean visible) { this.visible = visible; }
 
     public Instant getPrayedAt() { return prayedAt; }
     public void setPrayedAt(Instant prayedAt) { this.prayedAt = prayedAt; }

@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.messaging.dto.ConversationSummaryResponse;
 import com.dosotres.messaging.dto.MessageResponse;
+import com.dosotres.publicwall.PublicPrayerRequest;
 import com.dosotres.push.PushNotificationService;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
@@ -255,5 +256,93 @@ class MessagingServiceTest {
         service.declineConversation(2L, 100L);
 
         assertThat(c.getState()).isEqualTo(ConversationState.DECLINED);
+    }
+
+    private PublicPrayerRequest makeOrigin(Long id, String title, User author) {
+        PublicPrayerRequest r = new PublicPrayerRequest();
+        r.setId(id);
+        r.setTitle(title);
+        r.setAuthor(author);
+        return r;
+    }
+
+    @Test
+    void startLinkRequest_new_createsPendingWithOrigin() {
+        User orante = makeUser(1L, "Luis");
+        User author = makeUser(2L, "Ana");
+        PublicPrayerRequest origin = makeOrigin(10L, "Por mi familia", author);
+        when(conversationRepository.findByOriginPublicRequestIdAndInitiatedById(10L, 1L))
+                .thenReturn(Optional.empty());
+        when(userRepository.findById(1L)).thenReturn(Optional.of(orante));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(author));
+        when(conversationRepository.save(any(Conversation.class))).thenAnswer(inv -> {
+            Conversation c = inv.getArgument(0);
+            c.setId(100L);
+            return c;
+        });
+        when(participantRepository.save(any(ConversationParticipant.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(participantRepository.findFirstByConversationIdAndUserIdNot(100L, 1L))
+                .thenReturn(Optional.of(makeParticipant(makeConversation(100L), author)));
+        when(messageRepository.findFirstByConversationIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.empty());
+        when(messageRepository.countByConversationIdAndCreatedAtAfterAndSenderIdNot(eq(100L), any(), eq(1L)))
+                .thenReturn(0L);
+
+        ConversationSummaryResponse res = service.startLinkRequest(1L, 2L, origin);
+
+        verify(messagingPolicy).assertCanRequestLink(1L, 2L);
+        assertThat(res.id()).isEqualTo(100L);
+        assertThat(res.state()).isEqualTo("PENDING");
+        assertThat(res.iAmInitiator()).isTrue();
+        verify(participantRepository, times(2)).save(any(ConversationParticipant.class));
+    }
+
+    @Test
+    void startLinkRequest_existing_returnsItIdempotent() {
+        User orante = makeUser(1L, "Luis");
+        User author = makeUser(2L, "Ana");
+        PublicPrayerRequest origin = makeOrigin(10L, "Por mi familia", author);
+        Conversation c = makePendingConversation(100L, orante);
+        c.setOriginPublicRequest(origin);
+        c.setOriginContext("Por mi familia");
+        when(conversationRepository.findByOriginPublicRequestIdAndInitiatedById(10L, 1L))
+                .thenReturn(Optional.of(c));
+        when(participantRepository.findByConversationIdAndUserId(100L, 1L))
+                .thenReturn(Optional.of(makeParticipant(c, orante)));
+        when(participantRepository.findFirstByConversationIdAndUserIdNot(100L, 1L))
+                .thenReturn(Optional.of(makeParticipant(c, author)));
+        when(messageRepository.findFirstByConversationIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.empty());
+        when(messageRepository.countByConversationIdAndCreatedAtAfterAndSenderIdNot(eq(100L), any(), eq(1L)))
+                .thenReturn(0L);
+
+        ConversationSummaryResponse res = service.startLinkRequest(1L, 2L, origin);
+
+        assertThat(res.id()).isEqualTo(100L);
+        verify(conversationRepository, never()).save(any(Conversation.class));
+    }
+
+    @Test
+    void listConversations_pendingLinkRequest_masksInitiatorForRecipient() {
+        User orante = makeUser(1L, "Luis");
+        User author = makeUser(2L, "Ana");
+        PublicPrayerRequest origin = makeOrigin(10L, "Por mi familia", author);
+        Conversation c = makePendingConversation(100L, orante);
+        c.setOriginPublicRequest(origin);
+        c.setOriginContext("Por mi familia");
+        // El receptor (autor, id 2) mira su bandeja.
+        when(participantRepository.findMyConversations(2L))
+                .thenReturn(List.of(makeParticipant(c, author)));
+        when(participantRepository.findFirstByConversationIdAndUserIdNot(100L, 2L))
+                .thenReturn(Optional.of(makeParticipant(c, orante)));
+        when(messageRepository.findFirstByConversationIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.empty());
+        when(messageRepository.countByConversationIdAndCreatedAtAfterAndSenderIdNot(eq(100L), any(), eq(2L)))
+                .thenReturn(0L);
+
+        List<ConversationSummaryResponse> res = service.listConversations(2L);
+
+        assertThat(res).hasSize(1);
+        assertThat(res.get(0).otherUserId()).isNull();
+        assertThat(res.get(0).otherUserName()).isNull();
+        assertThat(res.get(0).originTitle()).isEqualTo("Por mi familia");
+        assertThat(res.get(0).iAmInitiator()).isFalse();
     }
 }

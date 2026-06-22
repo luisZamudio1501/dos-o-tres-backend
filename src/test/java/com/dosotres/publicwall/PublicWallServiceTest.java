@@ -11,11 +11,16 @@ import static org.mockito.Mockito.when;
 import com.dosotres.common.exception.ConflictException;
 import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
+import com.dosotres.common.exception.ValidationException;
+import com.dosotres.messaging.MessagingService;
 import com.dosotres.moderation.ModerationAccess;
 import com.dosotres.publicwall.dto.CreatePublicRequestRequest;
+import com.dosotres.publicwall.dto.PrayerEntryResponse;
 import com.dosotres.publicwall.dto.PublicRequestResponse;
+import com.dosotres.push.PushNotificationService;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -24,6 +29,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -41,6 +47,10 @@ class PublicWallServiceTest {
     private UserRepository userRepository;
     @Mock
     private ModerationAccess moderationAccess;
+    @Mock
+    private MessagingService messagingService;
+    @Mock
+    private PushNotificationService pushService;
 
     private final Instant now = Instant.parse("2026-06-21T12:00:00Z");
     private final Clock fixedClock = Clock.fixed(now, ZoneId.of("UTC"));
@@ -50,7 +60,8 @@ class PublicWallServiceTest {
     @BeforeEach
     void setUp() {
         service = new PublicWallService(
-                requestRepository, prayerRepository, userRepository, moderationAccess, fixedClock);
+                requestRepository, prayerRepository, userRepository, moderationAccess,
+                messagingService, pushService, new ObjectMapper(), fixedClock);
     }
 
     private User makeUser(Long id, String name, String country) {
@@ -150,13 +161,30 @@ class PublicWallServiceTest {
         when(prayerRepository.existsByRequestIdAndUserId(10L, 1L)).thenReturn(false);
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser(1L, "Luis", "AR")));
 
-        PublicRequestResponse res = service.pray(1L, 10L);
+        PublicRequestResponse res = service.pray(1L, 10L, false);
 
-        verify(prayerRepository).save(any(PublicPrayer.class));
+        ArgumentCaptor<PublicPrayer> captor = ArgumentCaptor.forClass(PublicPrayer.class);
+        verify(prayerRepository).save(captor.capture());
+        assertThat(captor.getValue().isVisible()).isFalse();
         assertThat(r.getPrayCount()).isEqualTo(1);
         assertThat(r.getLastActivityAt()).isEqualTo(now);
         assertThat(res.prayCount()).isEqualTo(1);
         assertThat(res.iPrayed()).isTrue();
+    }
+
+    @Test
+    void pray_visible_savesVisibleTrue() {
+        User author = makeUser(2L, "Ana", "UY");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(prayerRepository.existsByRequestIdAndUserId(10L, 1L)).thenReturn(false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser(1L, "Luis", "AR")));
+
+        service.pray(1L, 10L, true);
+
+        ArgumentCaptor<PublicPrayer> captor = ArgumentCaptor.forClass(PublicPrayer.class);
+        verify(prayerRepository).save(captor.capture());
+        assertThat(captor.getValue().isVisible()).isTrue();
     }
 
     @Test
@@ -166,7 +194,7 @@ class PublicWallServiceTest {
         when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
         when(prayerRepository.existsByRequestIdAndUserId(10L, 1L)).thenReturn(true);
 
-        PublicRequestResponse res = service.pray(1L, 10L);
+        PublicRequestResponse res = service.pray(1L, 10L, false);
 
         verify(prayerRepository, never()).save(any(PublicPrayer.class));
         assertThat(r.getPrayCount()).isZero();
@@ -179,9 +207,142 @@ class PublicWallServiceTest {
         PublicPrayerRequest hidden = makeRequest(10L, author, false, ModerationStatus.HIDDEN);
         when(requestRepository.findById(10L)).thenReturn(Optional.of(hidden));
 
-        assertThatThrownBy(() -> service.pray(1L, 10L))
+        assertThatThrownBy(() -> service.pray(1L, 10L, false))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(prayerRepository, never()).save(any(PublicPrayer.class));
+    }
+
+    @Test
+    void requestLink_happyPath_delegatesToMessaging() {
+        User author = makeUser(2L, "Ana", "UY");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(prayerRepository.existsByRequestIdAndUserId(10L, 1L)).thenReturn(true);
+
+        service.requestLink(1L, 10L);
+
+        verify(messagingService).startLinkRequest(1L, 2L, r);
+    }
+
+    @Test
+    void requestLink_notPrayed_throwsForbidden() {
+        User author = makeUser(2L, "Ana", "UY");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(prayerRepository.existsByRequestIdAndUserId(10L, 1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.requestLink(1L, 10L))
+                .isInstanceOf(ForbiddenException.class);
+        verify(messagingService, never()).startLinkRequest(any(), any(), any());
+    }
+
+    @Test
+    void requestLink_ownRequest_throwsValidation() {
+        User author = makeUser(1L, "Luis", "AR");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> service.requestLink(1L, 10L))
+                .isInstanceOf(ValidationException.class);
+        verify(messagingService, never()).startLinkRequest(any(), any(), any());
+    }
+
+    private PublicPrayer makePrayer(User user, boolean visible) {
+        PublicPrayer p = new PublicPrayer();
+        p.setUser(user);
+        p.setVisible(visible);
+        p.setPrayedAt(now);
+        return p;
+    }
+
+    @Test
+    void listPrayers_byAuthor_masksAnonymous() {
+        User author = makeUser(1L, "Luis", "AR");
+        User visible = makeUser(2L, "Ana", "UY");
+        User anon = makeUser(3L, "Tomás", "AR");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(prayerRepository.findByRequestIdOrderByPrayedAtDesc(10L))
+                .thenReturn(List.of(makePrayer(visible, true), makePrayer(anon, false)));
+
+        List<PrayerEntryResponse> res = service.listPrayers(1L, 10L);
+
+        assertThat(res).hasSize(2);
+        assertThat(res.get(0).userId()).isEqualTo(2L);
+        assertThat(res.get(0).displayName()).isEqualTo("Ana");
+        assertThat(res.get(1).userId()).isNull();
+        assertThat(res.get(1).displayName()).isEqualTo("Anónimo");
+    }
+
+    @Test
+    void listPrayers_byNonAuthor_throwsForbidden() {
+        User author = makeUser(1L, "Luis", "AR");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> service.listPrayers(99L, 10L))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void sendThanks_byAuthor_pushesToAllPrayers() {
+        User author = makeUser(1L, "Luis", "AR");
+        User visible = makeUser(2L, "Ana", "UY");
+        User anon = makeUser(3L, "Tomás", "AR");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(prayerRepository.findByRequestIdOrderByPrayedAtDesc(10L))
+                .thenReturn(List.of(makePrayer(visible, true), makePrayer(anon, false)));
+
+        service.sendThanks(1L, 10L);
+
+        verify(pushService).sendToUsers(eq(List.of(2L, 3L)), any());
+    }
+
+    @Test
+    void sendThanks_byNonAuthor_throwsForbidden() {
+        User author = makeUser(1L, "Luis", "AR");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> service.sendThanks(99L, 10L))
+                .isInstanceOf(ForbiddenException.class);
+        verify(pushService, never()).sendToUsers(any(), any());
+    }
+
+    @Test
+    void requestLinkFromAuthor_visiblePrayer_delegatesToMessaging() {
+        User author = makeUser(1L, "Luis", "AR");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(prayerRepository.existsByRequestIdAndUserIdAndVisibleTrue(10L, 2L)).thenReturn(true);
+
+        service.requestLinkFromAuthor(1L, 10L, 2L);
+
+        verify(messagingService).startLinkRequest(1L, 2L, r);
+    }
+
+    @Test
+    void requestLinkFromAuthor_anonymousPrayer_throwsForbidden() {
+        User author = makeUser(1L, "Luis", "AR");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(prayerRepository.existsByRequestIdAndUserIdAndVisibleTrue(10L, 3L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.requestLinkFromAuthor(1L, 10L, 3L))
+                .isInstanceOf(ForbiddenException.class);
+        verify(messagingService, never()).startLinkRequest(any(), any(), any());
+    }
+
+    @Test
+    void requestLinkFromAuthor_byNonAuthor_throwsForbidden() {
+        User author = makeUser(1L, "Luis", "AR");
+        PublicPrayerRequest r = makeRequest(10L, author, false, ModerationStatus.VISIBLE);
+        when(requestRepository.findById(10L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> service.requestLinkFromAuthor(99L, 10L, 2L))
+                .isInstanceOf(ForbiddenException.class);
+        verify(messagingService, never()).startLinkRequest(any(), any(), any());
     }
 
     @Test

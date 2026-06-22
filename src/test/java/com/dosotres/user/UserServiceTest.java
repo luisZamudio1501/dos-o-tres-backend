@@ -7,6 +7,9 @@ import static org.mockito.Mockito.when;
 import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.user.dto.UpdateProfileRequest;
 import com.dosotres.user.dto.UserProfileResponse;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,9 +25,11 @@ class UserServiceTest {
 
     private UserService userService;
 
+    private final Clock fixedClock = Clock.fixed(Instant.parse("2026-06-21T12:00:00Z"), ZoneId.of("UTC"));
+
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository);
+        userService = new UserService(userRepository, fixedClock);
     }
 
     private User makeUser() {
@@ -64,7 +69,7 @@ class UserServiceTest {
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
                 "Luis Z.", "ar", "Santa Fe", "Rosario", "Iglesia Bautista Centro", null, null, null, null, null,
-                null));
+                null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis Z.");
         assertThat(res.country()).isEqualTo("AR");
@@ -83,7 +88,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, "  ", "", null, null, null, null, null, null, null));
+                null, null, "  ", "", null, null, null, null, null, null, null, null));
 
         assertThat(res.country()).isNull();
         assertThat(res.province()).isNull();
@@ -96,7 +101,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, "AR", null, "Rosario", null, null, null, null, null, null, null));
+                null, "AR", null, "Rosario", null, null, null, null, null, null, null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis");
         assertThat(res.country()).isEqualTo("AR");
@@ -108,7 +113,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                "  Luis Z.  ", null, null, "  Rosario  ", null, null, null, null, null, null, null));
+                "  Luis Z.  ", null, null, "  Rosario  ", null, null, null, null, null, null, null, null));
 
         assertThat(res.displayName()).isEqualTo("Luis Z.");
         assertThat(res.city()).isEqualTo("Rosario");
@@ -130,7 +135,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, null, null, null, null, null, false, null, false, null));
+                null, null, null, null, null, null, null, null, false, null, false, null));
 
         assertThat(res.notifyOnRequestCreated()).isFalse();
         assertThat(res.notifyOnPrayed()).isTrue();
@@ -152,7 +157,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, null, null, null, "+54 341 5550000", PhoneVisibility.GROUP, null, null, null, null));
+                null, null, null, null, null, null, "+54 341 5550000", PhoneVisibility.GROUP, null, null, null, null));
 
         assertThat(res.phone()).isEqualTo("+54 341 5550000");
         assertThat(res.phoneVisibility()).isEqualTo("GROUP");
@@ -165,7 +170,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, null, null, null, "  ", null, null, null, null, null));
+                null, null, null, null, null, null, "  ", null, null, null, null, null));
 
         assertThat(res.phone()).isNull();
     }
@@ -184,7 +189,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(makeUser()));
 
         UserProfileResponse res = userService.updateProfile(1L, new UpdateProfileRequest(
-                null, null, null, null, null, null, null, null, null, null, true));
+                null, null, null, null, null, null, null, null, null, null, null, true));
 
         assertThat(res.allowStrangerMessages()).isTrue();
     }

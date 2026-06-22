@@ -1,5 +1,6 @@
 package com.dosotres.messaging;
 
+import com.dosotres.publicwall.PublicPrayerRequest;
 import com.dosotres.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -31,6 +32,15 @@ public class Conversation {
     @JoinColumn(name = "initiated_by", nullable = false)
     private User initiatedBy;
 
+    /** Pedido del muro que originó la solicitud de vínculo (null = conversación común). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "origin_public_request_id")
+    private PublicPrayerRequest originPublicRequest;
+
+    /** Snapshot del título del pedido de origen, para mostrar sin join al enmascarar. */
+    @Column(name = "origin_context", length = 150)
+    private String originContext;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -50,6 +60,12 @@ public class Conversation {
 
     public User getInitiatedBy() { return initiatedBy; }
     public void setInitiatedBy(User initiatedBy) { this.initiatedBy = initiatedBy; }
+
+    public PublicPrayerRequest getOriginPublicRequest() { return originPublicRequest; }
+    public void setOriginPublicRequest(PublicPrayerRequest originPublicRequest) { this.originPublicRequest = originPublicRequest; }
+
+    public String getOriginContext() { return originContext; }
+    public void setOriginContext(String originContext) { this.originContext = originContext; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

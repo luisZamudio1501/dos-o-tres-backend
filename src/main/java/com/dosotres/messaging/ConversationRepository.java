@@ -2,6 +2,7 @@ package com.dosotres.messaging;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,4 +17,7 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
 
     /** Rate limit de solicitudes nuevas a desconocidos (Fase 4). */
     long countByInitiatedByIdAndStateAndCreatedAtAfter(Long initiatedById, ConversationState state, Instant after);
+
+    /** Anti-spam del vínculo: una solicitud por orante por pedido (Fase 5). */
+    Optional<Conversation> findByOriginPublicRequestIdAndInitiatedById(Long originPublicRequestId, Long initiatedById);
 }

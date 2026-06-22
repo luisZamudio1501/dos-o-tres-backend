@@ -3,17 +3,26 @@ package com.dosotres.publicwall;
 import com.dosotres.common.exception.ConflictException;
 import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
+import com.dosotres.common.exception.ValidationException;
+import com.dosotres.messaging.MessagingService;
+import com.dosotres.messaging.dto.ConversationSummaryResponse;
 import com.dosotres.moderation.ModerationAccess;
 import com.dosotres.publicwall.dto.CreatePublicRequestRequest;
+import com.dosotres.publicwall.dto.PrayerEntryResponse;
 import com.dosotres.publicwall.dto.PublicRequestResponse;
+import com.dosotres.push.PushNotificationService;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -23,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class PublicWallService {
 
+    private static final Logger log = LoggerFactory.getLogger(PublicWallService.class);
+
     /** Inactividad tras la cual un pedido activo se auto-archiva. */
     static final Duration STALE_THRESHOLD = Duration.ofDays(90);
 
@@ -30,17 +41,26 @@ public class PublicWallService {
     private final PublicPrayerRepository prayerRepository;
     private final UserRepository userRepository;
     private final ModerationAccess moderationAccess;
+    private final MessagingService messagingService;
+    private final PushNotificationService pushService;
+    private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public PublicWallService(PublicPrayerRequestRepository requestRepository,
                              PublicPrayerRepository prayerRepository,
                              UserRepository userRepository,
                              ModerationAccess moderationAccess,
+                             MessagingService messagingService,
+                             PushNotificationService pushService,
+                             ObjectMapper objectMapper,
                              Clock clock) {
         this.requestRepository = requestRepository;
         this.prayerRepository = prayerRepository;
         this.userRepository = userRepository;
         this.moderationAccess = moderationAccess;
+        this.messagingService = messagingService;
+        this.pushService = pushService;
+        this.objectMapper = objectMapper;
         this.clock = clock;
     }
 
@@ -79,8 +99,12 @@ public class PublicWallService {
         return mapWithPrayed(page, userId);
     }
 
-    /** "Oré por esto": idempotente, suma al contador y refresca la actividad una sola vez por usuario. */
-    public PublicRequestResponse pray(Long userId, Long requestId) {
+    /**
+     * "Oré por esto": idempotente, suma al contador y refresca la actividad una sola vez
+     * por usuario. {@code visible} guarda si el orante se muestra con su nombre (default
+     * anónimo); sólo aplica al registrar la primera oración.
+     */
+    public PublicRequestResponse pray(Long userId, Long requestId, boolean visible) {
         PublicPrayerRequest request = requestRepository.findById(requestId)
                 .filter(r -> r.getModerationStatus() == ModerationStatus.VISIBLE)
                 .orElseThrow(() -> new ResourceNotFoundException("PublicPrayerRequest", "id", requestId));
@@ -92,6 +116,7 @@ public class PublicWallService {
             PublicPrayer prayer = new PublicPrayer();
             prayer.setRequest(request);
             prayer.setUser(user);
+            prayer.setVisible(visible);
             prayerRepository.save(prayer);
 
             request.setPrayCount(request.getPrayCount() + 1);
@@ -99,6 +124,87 @@ public class PublicWallService {
         }
 
         return toResponse(request, userId, true);
+    }
+
+    /**
+     * Solicitud de vínculo del orante hacia el autor (Fase 5, Etapa 1). Exige haber orado
+     * por el pedido y que no sea propio; delega en mensajería (gate 18 + anti-spam).
+     */
+    public ConversationSummaryResponse requestLink(Long userId, Long requestId) {
+        PublicPrayerRequest request = requestRepository.findById(requestId)
+                .filter(r -> r.getModerationStatus() == ModerationStatus.VISIBLE)
+                .orElseThrow(() -> new ResourceNotFoundException("PublicPrayerRequest", "id", requestId));
+
+        Long authorId = request.getAuthor().getId();
+        if (authorId.equals(userId)) {
+            throw new ValidationException("No podés solicitar un vínculo con tu propio pedido");
+        }
+        if (!prayerRepository.existsByRequestIdAndUserId(requestId, userId)) {
+            throw new ForbiddenException("Primero orá por este pedido para poder conectar");
+        }
+
+        return messagingService.startLinkRequest(userId, authorId, request);
+    }
+
+    /**
+     * El autor ve quiénes oraron por su pedido (Fase 6, Etapa 2): los visibles con su
+     * nombre, los anónimos como "Anónimo" sin revelar su identidad.
+     */
+    @Transactional(readOnly = true)
+    public List<PrayerEntryResponse> listPrayers(Long authorId, Long requestId) {
+        PublicPrayerRequest request = requireOwnRequest(authorId, requestId);
+        return prayerRepository.findByRequestIdOrderByPrayedAtDesc(request.getId()).stream()
+                .map(p -> p.isVisible()
+                        ? new PrayerEntryResponse(p.getUser().getId(), p.getUser().getDisplayName(),
+                                p.getPrayedAt().toString())
+                        : new PrayerEntryResponse(null, "Anónimo", p.getPrayedAt().toString()))
+                .toList();
+    }
+
+    /**
+     * Agradecimiento general del autor a todos los que oraron (Fase 6): un solo sentido,
+     * no abre chat. Los anónimos lo reciben sin revelarse (el push no expone identidad
+     * alguna a quien lo recibe, solo que el autor de ese pedido agradeció).
+     */
+    @Transactional(readOnly = true)
+    public void sendThanks(Long authorId, Long requestId) {
+        PublicPrayerRequest request = requireOwnRequest(authorId, requestId);
+        List<Long> recipientIds = prayerRepository.findByRequestIdOrderByPrayedAtDesc(request.getId())
+                .stream().map(p -> p.getUser().getId()).toList();
+        if (recipientIds.isEmpty()) {
+            return;
+        }
+        try {
+            String payload = objectMapper.writeValueAsString(Map.of(
+                    "title", "Gracias por orar",
+                    "body", request.getAuthor().getDisplayName() + " agradeció tu oración por «"
+                            + request.getTitle() + "»",
+                    "url", "/muro"));
+            pushService.sendToUsers(recipientIds, payload);
+        } catch (Exception e) {
+            log.warn("Thanks push failed requestId={}: {}", requestId, e.getMessage());
+        }
+    }
+
+    /**
+     * El autor inicia él mismo un vínculo con un orante (Fase 6, Etapa 2). Solo con
+     * orantes visibles: no hay a quién dirigir un vínculo individual con alguien anónimo.
+     */
+    public ConversationSummaryResponse requestLinkFromAuthor(Long authorId, Long requestId, Long prayerUserId) {
+        PublicPrayerRequest request = requireOwnRequest(authorId, requestId);
+        if (!prayerRepository.existsByRequestIdAndUserIdAndVisibleTrue(requestId, prayerUserId)) {
+            throw new ForbiddenException("Solo podés conectar con quienes oraron de forma visible");
+        }
+        return messagingService.startLinkRequest(authorId, prayerUserId, request);
+    }
+
+    private PublicPrayerRequest requireOwnRequest(Long authorId, Long requestId) {
+        PublicPrayerRequest request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("PublicPrayerRequest", "id", requestId));
+        if (!request.getAuthor().getId().equals(authorId)) {
+            throw new ForbiddenException("Solo el autor puede ver u operar sobre quienes oraron");
+        }
+        return request;
     }
 
     /** El autor (aun anónimo) marca el pedido como respondido, con testimonio opcional. */

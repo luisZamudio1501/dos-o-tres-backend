@@ -52,6 +52,9 @@ public class User {
     @Column(name = "church_name", length = 150)
     private String churchName;
 
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+
     // Contacto opcional (M.1). Privado por defecto; nunca en el muro público.
     @Column(length = 30)
     private String phone;
@@ -185,6 +188,14 @@ public class User {
 
     public void setChurchName(String churchName) {
         this.churchName = churchName;
+    }
+
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
     }
 
     public SubscriptionTier getSubscriptionTier() {

@@ -3,6 +3,7 @@ package com.dosotres.user;
 import com.dosotres.common.exception.ResourceNotFoundException;
 import com.dosotres.user.dto.UpdateProfileRequest;
 import com.dosotres.user.dto.UserProfileResponse;
+import java.time.Clock;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,9 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final Clock clock;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, Clock clock) {
         this.userRepository = userRepository;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -36,6 +39,11 @@ public class UserService {
         user.setProvince(normalize(req.province()));
         user.setCity(normalize(req.city()));
         user.setChurchName(normalize(req.churchName()));
+        // La fecha de nacimiento no se limpia con null (perdería el gate de adultez);
+        // solo se actualiza si viene un valor (cuentas viejas que la declaran).
+        if (req.dateOfBirth() != null) {
+            user.setDateOfBirth(req.dateOfBirth());
+        }
         user.setPhone(normalize(req.phone()));
         if (req.phoneVisibility() != null) {
             user.setPhoneVisibility(req.phoneVisibility());
@@ -83,6 +91,8 @@ public class UserService {
                 user.getProvince(),
                 user.getCity(),
                 user.getChurchName(),
+                user.getDateOfBirth() != null ? user.getDateOfBirth().toString() : null,
+                AgePolicy.isAdult(user.getDateOfBirth(), clock),
                 user.getPhone(),
                 user.getPhoneVisibility().name(),
                 user.getGlobalRole().name(),
