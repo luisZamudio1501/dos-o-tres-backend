@@ -2,7 +2,6 @@ package com.dosotres.moderation;
 
 import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
-import com.dosotres.user.GlobalRole;
 import com.dosotres.user.User;
 import com.dosotres.user.UserRepository;
 import org.springframework.stereotype.Component;
@@ -20,11 +19,14 @@ public class ModerationAccess {
         this.userRepository = userRepository;
     }
 
-    /** Exige rol MODERATOR; devuelve el usuario. Lanza Forbidden si no lo es. */
+    /**
+     * Exige capacidad de moderación (MODERATOR o ADMIN); devuelve el usuario.
+     * Lanza Forbidden si no la tiene. ADMIN es superconjunto de MODERATOR.
+     */
     public User requireModerator(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-        if (user.getGlobalRole() != GlobalRole.MODERATOR) {
+        if (!user.getGlobalRole().canModerate()) {
             throw new ForbiddenException("Requiere rol de moderador global");
         }
         return user;
@@ -32,7 +34,7 @@ public class ModerationAccess {
 
     public boolean isModerator(Long userId) {
         return userRepository.findById(userId)
-                .map(u -> u.getGlobalRole() == GlobalRole.MODERATOR)
+                .map(u -> u.getGlobalRole().canModerate())
                 .orElse(false);
     }
 }
