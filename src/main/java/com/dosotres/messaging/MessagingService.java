@@ -121,7 +121,22 @@ public class MessagingService {
         participantRepository.save(myParticipation);
         participantRepository.save(participant(conversation, recipient));
 
+        pushLinkRequest(recipientId, origin.getTitle(), conversation.getId());
+
         return toSummary(myParticipation);
+    }
+
+    /** Push enmascarado al receptor de una solicitud de vínculo (no revela al iniciador). */
+    private void pushLinkRequest(Long recipientId, String originTitle, Long conversationId) {
+        try {
+            String payload = objectMapper.writeValueAsString(Map.of(
+                    "title", "🙏 Nueva conexión",
+                    "body", "Alguien quiere conectar contigo por el pedido «" + originTitle + "»",
+                    "url", "/mensajes"));
+            pushService.sendToUsers(List.of(recipientId), payload);
+        } catch (Exception e) {
+            log.warn("Link-request push failed conversationId={}: {}", conversationId, e.getMessage());
+        }
     }
 
     /** El receptor acepta una solicitud de desconocido (Fase 4). */
@@ -278,16 +293,16 @@ public class MessagingService {
                 .countByConversationIdAndCreatedAtAfterAndSenderIdNot(c.getId(), since, myId);
 
         boolean iAmInitiator = c.getInitiatedBy().getId().equals(myId);
-        // Solicitud de vínculo del muro: hasta que el receptor (autor) acepta, la
-        // identidad del solicitante queda enmascarada; se muestra el contexto del pedido.
-        boolean maskInitiator = c.getOriginPublicRequest() != null
-                && c.getState() == ConversationState.PENDING
-                && !iAmInitiator;
+        // Solicitud de vínculo del muro: hasta que se acepta, la identidad queda
+        // enmascarada para AMBOS lados (la solicitud puede iniciarla el orante o el
+        // autor, y cualquiera de los dos puede ser anónimo). Se muestra el contexto.
+        boolean maskOther = c.getOriginPublicRequest() != null
+                && c.getState() == ConversationState.PENDING;
 
         return new ConversationSummaryResponse(
                 c.getId(),
-                maskInitiator || other == null ? null : other.getUser().getId(),
-                maskInitiator || other == null ? null : other.getUser().getDisplayName(),
+                maskOther || other == null ? null : other.getUser().getId(),
+                maskOther || other == null ? null : other.getUser().getDisplayName(),
                 last != null ? last.getBody() : null,
                 last != null && last.getCreatedAt() != null ? last.getCreatedAt().toString() : null,
                 unread,

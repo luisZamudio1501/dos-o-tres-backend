@@ -155,9 +155,9 @@ public class PublicWallService {
         PublicPrayerRequest request = requireOwnRequest(authorId, requestId);
         return prayerRepository.findByRequestIdOrderByPrayedAtDesc(request.getId()).stream()
                 .map(p -> p.isVisible()
-                        ? new PrayerEntryResponse(p.getUser().getId(), p.getUser().getDisplayName(),
-                                p.getPrayedAt().toString())
-                        : new PrayerEntryResponse(null, "Anónimo", p.getPrayedAt().toString()))
+                        ? new PrayerEntryResponse(p.getId(), p.getUser().getId(),
+                                p.getUser().getDisplayName(), p.getPrayedAt().toString())
+                        : new PrayerEntryResponse(p.getId(), null, "Anónimo", p.getPrayedAt().toString()))
                 .toList();
     }
 
@@ -187,15 +187,17 @@ public class PublicWallService {
     }
 
     /**
-     * El autor inicia él mismo un vínculo con un orante (Fase 6, Etapa 2). Solo con
-     * orantes visibles: no hay a quién dirigir un vínculo individual con alguien anónimo.
+     * El autor inicia él mismo un vínculo con un orante (Fase 6, Etapa 2). Identifica al
+     * orante por el id opaco de su oración (no por user_id), de modo que también puede
+     * conectar con anónimos sin que el backend les revele la identidad: el orante recibe
+     * la solicitud enmascarada y, si acepta, se revelan mutuamente.
      */
-    public ConversationSummaryResponse requestLinkFromAuthor(Long authorId, Long requestId, Long prayerUserId) {
+    public ConversationSummaryResponse requestLinkFromAuthor(Long authorId, Long requestId, Long prayerId) {
         PublicPrayerRequest request = requireOwnRequest(authorId, requestId);
-        if (!prayerRepository.existsByRequestIdAndUserIdAndVisibleTrue(requestId, prayerUserId)) {
-            throw new ForbiddenException("Solo podés conectar con quienes oraron de forma visible");
-        }
-        return messagingService.startLinkRequest(authorId, prayerUserId, request);
+        PublicPrayer prayer = prayerRepository.findById(prayerId)
+                .filter(p -> p.getRequest().getId().equals(requestId))
+                .orElseThrow(() -> new ResourceNotFoundException("PublicPrayer", "id", prayerId));
+        return messagingService.startLinkRequest(authorId, prayer.getUser().getId(), request);
     }
 
     private PublicPrayerRequest requireOwnRequest(Long authorId, Long requestId) {

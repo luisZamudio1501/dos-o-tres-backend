@@ -297,7 +297,12 @@ class MessagingServiceTest {
         assertThat(res.id()).isEqualTo(100L);
         assertThat(res.state()).isEqualTo("PENDING");
         assertThat(res.iAmInitiator()).isTrue();
+        // Masking simétrico: ni el iniciador ve al otro mientras está PENDING.
+        assertThat(res.otherUserId()).isNull();
+        assertThat(res.originTitle()).isEqualTo("Por mi familia");
         verify(participantRepository, times(2)).save(any(ConversationParticipant.class));
+        // Se notifica al receptor con un push enmascarado.
+        verify(pushService).sendToUsers(eq(List.of(2L)), anyString());
     }
 
     @Test

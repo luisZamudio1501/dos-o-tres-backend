@@ -9,8 +9,6 @@ public interface PublicPrayerRepository extends JpaRepository<PublicPrayer, Long
 
     boolean existsByRequestIdAndUserId(Long requestId, Long userId);
 
-    boolean existsByRequestIdAndUserIdAndVisibleTrue(Long requestId, Long userId);
-
     /** Quiénes oraron por un pedido, más reciente primero (para que el autor los vea / agradezca). */
     List<PublicPrayer> findByRequestIdOrderByPrayedAtDesc(Long requestId);
 

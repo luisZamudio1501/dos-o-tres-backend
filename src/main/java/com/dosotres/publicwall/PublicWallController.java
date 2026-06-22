@@ -80,11 +80,11 @@ public class PublicWallController {
         publicWallService.sendThanks(userId, id);
     }
 
-    /** El autor inicia él mismo un vínculo con un orante visible. */
-    @PostMapping("/{id}/link/{prayerUserId}")
+    /** El autor inicia él mismo un vínculo con un orante (visible o anónimo), por id de oración. */
+    @PostMapping("/{id}/link-prayer/{prayerId}")
     public ConversationSummaryResponse requestLinkFromAuthor(@AuthUser Long userId, @PathVariable Long id,
-                                                              @PathVariable Long prayerUserId) {
-        return publicWallService.requestLinkFromAuthor(userId, id, prayerUserId);
+                                                              @PathVariable Long prayerId) {
+        return publicWallService.requestLinkFromAuthor(userId, id, prayerId);
     }
 
     /** El autor marca su pedido como respondido, con testimonio opcional. */
