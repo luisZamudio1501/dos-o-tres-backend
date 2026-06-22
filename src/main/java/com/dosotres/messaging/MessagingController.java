@@ -1,5 +1,7 @@
 package com.dosotres.messaging;
 
+import com.dosotres.group.dto.CreateGroupRequest;
+import com.dosotres.group.dto.GroupResponse;
 import com.dosotres.messaging.dto.ConversationSummaryResponse;
 import com.dosotres.messaging.dto.MessageResponse;
 import com.dosotres.messaging.dto.SendMessageRequest;
@@ -71,5 +73,13 @@ public class MessagingController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void decline(@AuthUser Long userId, @PathVariable Long id) {
         messagingService.declineConversation(userId, id);
+    }
+
+    /** Crea un grupo de oración a partir de una conversación aceptada (Fase 7). */
+    @PostMapping("/{id}/group")
+    @ResponseStatus(HttpStatus.CREATED)
+    public GroupResponse createGroup(@AuthUser Long userId, @PathVariable Long id,
+                                     @Valid @RequestBody CreateGroupRequest req) {
+        return messagingService.createGroupFromConversation(userId, id, req);
     }
 }

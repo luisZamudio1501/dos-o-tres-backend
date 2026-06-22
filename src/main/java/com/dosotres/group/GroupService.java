@@ -104,6 +104,35 @@ public class GroupService {
         return toGroupResponse(group, memberCount, role);
     }
 
+    /**
+     * Alta directa sin invite-code (Fase 7: crear grupo desde una conversación
+     * ya aceptada). Idempotente igual que {@link #joinByInviteCode}.
+     */
+    public GroupResponse addMemberDirect(Long groupId, Long userId) {
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Group", "id", groupId));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        GroupRole role = groupMemberRepository.findByGroupIdAndUserId(groupId, userId)
+                .map(GroupMember::getRole)
+                .orElse(null);
+
+        if (role == null) {
+            GroupMember member = new GroupMember();
+            member.setGroup(group);
+            member.setUser(user);
+            member.setRole(GroupRole.MEMBER);
+            groupMemberRepository.save(member);
+            role = GroupRole.MEMBER;
+
+            activityService.record(group, user, ActivityEventType.MEMBER_JOINED, false, Map.of());
+        }
+
+        int memberCount = groupMemberRepository.findByGroupId(groupId).size();
+        return toGroupResponse(group, memberCount, role);
+    }
+
     /** Regenera el token de invitación (regla D3 — blindar ante filtraciones). Solo admin. */
     public GroupResponse regenerateInviteCode(Long groupId, Long actingUserId) {
         GroupMember acting = requireAdmin(groupId, actingUserId);

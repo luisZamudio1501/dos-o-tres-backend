@@ -11,6 +11,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.dosotres.common.exception.ForbiddenException;
+import com.dosotres.group.GroupService;
+import com.dosotres.group.dto.CreateGroupRequest;
+import com.dosotres.group.dto.GroupResponse;
 import com.dosotres.messaging.dto.ConversationSummaryResponse;
 import com.dosotres.messaging.dto.MessageResponse;
 import com.dosotres.publicwall.PublicPrayerRequest;
@@ -42,13 +45,14 @@ class MessagingServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private MessagingPolicy messagingPolicy;
     @Mock private PushNotificationService pushService;
+    @Mock private GroupService groupService;
 
     private MessagingService service;
 
     @BeforeEach
     void setUp() {
         service = new MessagingService(conversationRepository, participantRepository, messageRepository,
-                userRepository, messagingPolicy, pushService, new ObjectMapper(), FIXED_CLOCK);
+                userRepository, messagingPolicy, pushService, groupService, new ObjectMapper(), FIXED_CLOCK);
     }
 
     private User makeUser(Long id, String name) {
@@ -344,5 +348,55 @@ class MessagingServiceTest {
         assertThat(res.get(0).otherUserName()).isNull();
         assertThat(res.get(0).originTitle()).isEqualTo("Por mi familia");
         assertThat(res.get(0).iAmInitiator()).isFalse();
+    }
+
+    private GroupResponse makeGroupResponse(Long id, int memberCount, String role) {
+        return new GroupResponse(id, "Mi grupo", null, null, null, "invite-code", memberCount, role,
+                "2026-06-19T12:00:00Z");
+    }
+
+    @Test
+    void createGroupFromConversation_accepted_createsGroupWithBothMembers() {
+        User initiator = makeUser(1L, "Luis");
+        User other = makeUser(2L, "Ana");
+        Conversation c = makeConversation(100L);
+        c.setState(ConversationState.ACCEPTED);
+        CreateGroupRequest req = new CreateGroupRequest("Mi grupo", null);
+        when(conversationRepository.findById(100L)).thenReturn(Optional.of(c));
+        when(participantRepository.existsByConversationIdAndUserId(100L, 1L)).thenReturn(true);
+        when(participantRepository.findFirstByConversationIdAndUserIdNot(100L, 1L))
+                .thenReturn(Optional.of(makeParticipant(c, other)));
+        when(groupService.create(req, 1L)).thenReturn(makeGroupResponse(50L, 1, "ADMIN"));
+
+        GroupResponse res = service.createGroupFromConversation(1L, 100L, req);
+
+        verify(groupService).addMemberDirect(50L, 2L);
+        assertThat(res.id()).isEqualTo(50L);
+        assertThat(res.memberCount()).isEqualTo(2);
+        assertThat(res.role()).isEqualTo("ADMIN");
+    }
+
+    @Test
+    void createGroupFromConversation_notAccepted_throwsForbidden() {
+        User initiator = makeUser(1L, "Luis");
+        Conversation c = makePendingConversation(100L, initiator);
+        when(conversationRepository.findById(100L)).thenReturn(Optional.of(c));
+        when(participantRepository.existsByConversationIdAndUserId(100L, 1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.createGroupFromConversation(1L, 100L, new CreateGroupRequest("X", null)))
+                .isInstanceOf(ForbiddenException.class);
+        verify(groupService, never()).create(any(), any());
+    }
+
+    @Test
+    void createGroupFromConversation_byNonParticipant_throwsForbidden() {
+        Conversation c = makeConversation(100L);
+        c.setState(ConversationState.ACCEPTED);
+        when(conversationRepository.findById(100L)).thenReturn(Optional.of(c));
+        when(participantRepository.existsByConversationIdAndUserId(100L, 9L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createGroupFromConversation(9L, 100L, new CreateGroupRequest("X", null)))
+                .isInstanceOf(ForbiddenException.class);
+        verify(groupService, never()).create(any(), any());
     }
 }

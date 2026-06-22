@@ -151,6 +151,45 @@ class GroupServiceTest {
     }
 
     @Test
+    void addMemberDirect_new_addsAsMemberAndRecordsEvent() {
+        User user = makeUser(2L, "Ana");
+        Group group = makeGroup(10L, "Prayer Group");
+
+        when(groupRepository.findById(10L)).thenReturn(Optional.of(group));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 2L)).thenReturn(Optional.empty());
+        when(groupMemberRepository.save(any(GroupMember.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(groupMemberRepository.findByGroupId(10L)).thenReturn(List.of(new GroupMember(), new GroupMember()));
+
+        GroupResponse response = groupService.addMemberDirect(10L, 2L);
+
+        assertThat(response.role()).isEqualTo("MEMBER");
+        assertThat(response.memberCount()).isEqualTo(2);
+        ArgumentCaptor<GroupMember> captor = ArgumentCaptor.forClass(GroupMember.class);
+        verify(groupMemberRepository).save(captor.capture());
+        assertThat(captor.getValue().getRole()).isEqualTo(GroupRole.MEMBER);
+        verify(activityService).record(eq(group), eq(user), eq(ActivityEventType.MEMBER_JOINED), eq(false), anyMap());
+    }
+
+    @Test
+    void addMemberDirect_alreadyMember_idempotent() {
+        User user = makeUser(1L, "Luis");
+        Group group = makeGroup(10L, "Prayer Group");
+        GroupMember existing = makeMember(group, user, GroupRole.ADMIN);
+
+        when(groupRepository.findById(10L)).thenReturn(Optional.of(group));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(groupMemberRepository.findByGroupIdAndUserId(10L, 1L)).thenReturn(Optional.of(existing));
+        when(groupMemberRepository.findByGroupId(10L)).thenReturn(List.of(existing));
+
+        GroupResponse response = groupService.addMemberDirect(10L, 1L);
+
+        assertThat(response.role()).isEqualTo("ADMIN");
+        verify(groupMemberRepository, never()).save(any(GroupMember.class));
+        verify(activityService, never()).record(any(), any(), any(), anyBoolean(), anyMap());
+    }
+
+    @Test
     void listMyGroups_returnsGroupsForUser() {
         User user = makeUser(1L, "Luis");
         Group group1 = makeGroup(10L, "Group A");

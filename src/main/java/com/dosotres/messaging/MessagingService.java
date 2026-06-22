@@ -2,6 +2,9 @@ package com.dosotres.messaging;
 
 import com.dosotres.common.exception.ForbiddenException;
 import com.dosotres.common.exception.ResourceNotFoundException;
+import com.dosotres.group.GroupService;
+import com.dosotres.group.dto.CreateGroupRequest;
+import com.dosotres.group.dto.GroupResponse;
 import com.dosotres.messaging.dto.ConversationSummaryResponse;
 import com.dosotres.messaging.dto.MessageResponse;
 import com.dosotres.publicwall.PublicPrayerRequest;
@@ -32,6 +35,7 @@ public class MessagingService {
     private final UserRepository userRepository;
     private final MessagingPolicy messagingPolicy;
     private final PushNotificationService pushService;
+    private final GroupService groupService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -41,6 +45,7 @@ public class MessagingService {
                             UserRepository userRepository,
                             MessagingPolicy messagingPolicy,
                             PushNotificationService pushService,
+                            GroupService groupService,
                             ObjectMapper objectMapper,
                             Clock clock) {
         this.conversationRepository = conversationRepository;
@@ -49,6 +54,7 @@ public class MessagingService {
         this.userRepository = userRepository;
         this.messagingPolicy = messagingPolicy;
         this.pushService = pushService;
+        this.groupService = groupService;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -128,6 +134,32 @@ public class MessagingService {
     public void declineConversation(Long userId, Long conversationId) {
         Conversation conversation = requirePendingAsReceiver(userId, conversationId);
         conversation.setState(ConversationState.DECLINED);
+    }
+
+    /**
+     * Crea un grupo de oración a partir de una conversación 1:1 ya aceptada (Fase 7,
+     * Etapa 3). Aplica a cualquier conversación ACCEPTED, no solo a las originadas en
+     * el muro: el creador queda ADMIN y el otro participante se agrega directo, sin
+     * invite-code.
+     */
+    public GroupResponse createGroupFromConversation(Long userId, Long conversationId, CreateGroupRequest req) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "id", conversationId));
+        requireParticipant(conversationId, userId);
+        if (conversation.getState() != ConversationState.ACCEPTED) {
+            throw new ForbiddenException("Solo se puede crear un grupo desde una conversación aceptada");
+        }
+
+        ConversationParticipant other = participantRepository
+                .findFirstByConversationIdAndUserIdNot(conversationId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation", "otherParticipant", conversationId));
+
+        GroupResponse created = groupService.create(req, userId);
+        groupService.addMemberDirect(created.id(), other.getUser().getId());
+
+        return new GroupResponse(created.id(), created.name(), created.description(), created.color(),
+                created.iconEmoji(), created.inviteCode(), created.memberCount() + 1, created.role(),
+                created.createdAt());
     }
 
     private Conversation requirePendingAsReceiver(Long userId, Long conversationId) {
