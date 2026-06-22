@@ -53,6 +53,8 @@ public class GroupContextFilter extends OncePerRequestFilter {
                 new AntPathRequestMatcher("/api/public/**"),
                 // Mensajería: conversaciones entre usuarios, no dependen de un grupo.
                 new AntPathRequestMatcher("/api/conversations/**"),
+                // Panel de administración: métricas globales, gateado por rol ADMIN.
+                new AntPathRequestMatcher("/api/admin/**"),
                 new AntPathRequestMatcher("/actuator/**"),
                 new AntPathRequestMatcher("/swagger-ui/**"),
                 new AntPathRequestMatcher("/v3/api-docs/**")
