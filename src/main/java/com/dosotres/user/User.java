@@ -92,6 +92,10 @@ public class User {
     @Column(name = "global_role", nullable = false, length = 20)
     private GlobalRole globalRole = GlobalRole.USER;
 
+    // Siembra perezosa del catálogo default de temas (Fase 8, ADR-014). Una vez por usuario.
+    @Column(name = "prayer_topics_seeded", nullable = false)
+    private boolean prayerTopicsSeeded = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -276,6 +280,14 @@ public class User {
 
     public void setGlobalRole(GlobalRole globalRole) {
         this.globalRole = globalRole;
+    }
+
+    public boolean isPrayerTopicsSeeded() {
+        return prayerTopicsSeeded;
+    }
+
+    public void setPrayerTopicsSeeded(boolean prayerTopicsSeeded) {
+        this.prayerTopicsSeeded = prayerTopicsSeeded;
     }
 
     public Instant getCreatedAt() {

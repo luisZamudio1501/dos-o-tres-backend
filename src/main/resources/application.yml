@@ -48,3 +48,5 @@ app:
   public-wall:
     archive:
       cron: "0 30 3 * * *"
+  prayer-topic:
+    reminder-cron: "0 */5 * * * *"
