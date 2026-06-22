@@ -21,3 +21,8 @@ app:
     reminders-enabled: false
   reengagement:
     enabled: false
+  admin:
+    weekly-report:
+      enabled: false
+      cron: "0 0 8 * * MON"
+      recipient: admin@test.com

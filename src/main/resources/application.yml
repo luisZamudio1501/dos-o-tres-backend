@@ -50,3 +50,7 @@ app:
       cron: "0 30 3 * * *"
   prayer-topic:
     reminder-cron: "0 */5 * * * *"
+  admin:
+    weekly-report:
+      cron: "0 0 8 * * MON"
+      recipient: ${ADMIN_REPORT_RECIPIENT:luiszamudio150115@gmail.com}

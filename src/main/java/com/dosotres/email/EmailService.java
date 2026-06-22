@@ -67,6 +67,19 @@ public class EmailService {
         send(support, "Contacto desde la app — " + fromName, html);
     }
 
+    /**
+     * Envía un correo HTML ya compuesto por el llamador (p. ej. el resumen
+     * semanal de administración). Respeta el flag de habilitación global.
+     */
+    @Async
+    public void sendHtml(String to, String subject, String html) {
+        if (!enabled) {
+            log.info("SKIP sendHtml to={} subject='{}'", to, subject);
+            return;
+        }
+        send(to, subject, html);
+    }
+
     private void send(String to, String subject, String html) {
         try {
             MimeMessage msg = mailSender.createMimeMessage();

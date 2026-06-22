@@ -46,9 +46,18 @@ public class AdminMetricsService {
         this.clock = clock;
     }
 
+    /** Métricas gateadas por rol ADMIN (endpoint del dashboard). */
     public AdminMetricsResponse getMetrics(Long adminId, int requestedDays) {
         adminAccess.requireAdmin(adminId);
+        return computeMetrics(requestedDays);
+    }
 
+    /**
+     * Cálculo de métricas sin gate de autorización. Para uso interno de procesos
+     * de servidor confiables (p. ej. el resumen semanal por email), nunca expuesto
+     * directamente por un controller.
+     */
+    public AdminMetricsResponse computeMetrics(int requestedDays) {
         int days = Math.max(MIN_DAYS, Math.min(MAX_DAYS, requestedDays));
         ZoneId zone = clock.getZone();
         LocalDate today = LocalDate.now(clock);
